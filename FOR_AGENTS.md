@@ -334,7 +334,7 @@ Formatting is intentionally pluggable:
         - `{ error: string }` with status `responseCode || 500` when `.error(...)` was called.
         - `{ data: any }` with status `responseCode || 200` otherwise.
 
-Cookie values are validated to reject `;`, `=`, CR, or LF to reduce header injection risk.
+Cookie values are written with `encodeURIComponent` (and decoded again by `request.cookies()`), so any string is safe to store. Cookie names must be RFC 6265 tokens and `path`/`domain` must not contain `;`, CR or LF; `response.cookie(...)` / `response.deleteCookie(...)` throw immediately otherwise, so the failure surfaces as a handler error instead of breaking response formatting.
 
 ### Error behavior (important for compatibility)
 

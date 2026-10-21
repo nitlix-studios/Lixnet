@@ -16,11 +16,8 @@ export default function (defaultHeaders: Record<string, string>) {
         for (const [cookieName, cookie] of Object.entries(this.responseCookies)) {
             if (cookie.type === "value") {
                 const opts = cookie.options ?? {};
-                //detect value escapes
-                if (cookie.value?.includes(";") || cookie.value?.includes("=") || cookie.value?.includes("\n") || cookie.value?.includes("\r")) {
-                    throw new Error("Cookie value contains invalid characters");
-                }
-                const parts: string[] = [`${cookieName}=${cookie.value ?? ""}`];
+                // Encoded so any value is header-safe; request.cookies() decodes it back.
+                const parts: string[] = [`${cookieName}=${encodeURIComponent(cookie.value ?? "")}`];
                 if (opts.domain) parts.push(`Domain=${opts.domain}`);
                 if (opts.path) parts.push(`Path=${opts.path}`);
                 if ("maxAge" in opts && typeof (opts as any).maxAge === "number") {

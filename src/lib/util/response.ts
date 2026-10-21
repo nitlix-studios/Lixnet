@@ -10,6 +10,22 @@ export type CookieFullOptions = CookieBaseOptions & {
     maxAge?: number;
 };
 
+// RFC 6265 cookie-name token characters.
+const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const COOKIE_ATTRIBUTE_PATTERN = /[;\r\n]/;
+
+function assertCookie(cookieName: string, options?: CookieBaseOptions): void {
+    if (!COOKIE_NAME_PATTERN.test(cookieName)) {
+        throw new Error(`Invalid cookie name: ${JSON.stringify(cookieName)}`);
+    }
+    if (options?.domain && COOKIE_ATTRIBUTE_PATTERN.test(options.domain)) {
+        throw new Error("Cookie domain contains invalid characters");
+    }
+    if (options?.path && COOKIE_ATTRIBUTE_PATTERN.test(options.path)) {
+        throw new Error("Cookie path contains invalid characters");
+    }
+}
+
 export class LixnetResponse {
     public responseData: any;
     public responseError: string | null = null;
@@ -57,6 +73,7 @@ export class LixnetResponse {
     }
 
     public cookie(cookieName: string, cookieValue: string, cookieOptions?: CookieFullOptions): void {
+        assertCookie(cookieName, cookieOptions);
         this.responseCookies[cookieName] = {
             type: "value",
             value: cookieValue,
@@ -65,6 +82,7 @@ export class LixnetResponse {
     }
 
     public deleteCookie(cookieName: string, options?: CookieBaseOptions): void {
+        assertCookie(cookieName, options);
         this.responseCookies[cookieName] = {
             type: "delete",
             options,
