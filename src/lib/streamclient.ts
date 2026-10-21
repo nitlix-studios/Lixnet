@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
+import createCaller from "./util/createCaller";
 import { LixnetError, codeForStatus, errorFromBody } from "./error";
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
@@ -16,6 +17,13 @@ export type LXNStreamCallOptions<TChunk> = Prettify<{
     onStreamChunk?: (chunk: TChunk) => void;
 } & Omit<RequestInit, "method" | "body">>;
 
+/** One function per stream event: `caller.generate(input, { onStreamChunk })` is `client.call("generate", ...)`. */
+export type LixnetStreamCaller<Events> = {
+    [K in keyof Events]: (
+        ...args: LXNCallArgs<FunctionInput<Events[K]>, LXNStreamCallOptions<FunctionOutput<Events[K]>>>
+    ) => Promise<void>;
+};
+
 export default class LixnetStreamClient<
     Contract extends LXN_ServerClient_EventType,
     Events extends LXN_ServerClient_EventType = InferLixnetEvents<Contract>
@@ -23,9 +31,13 @@ export default class LixnetStreamClient<
     private rpcUrl: string;
     private fetcher?: LixnetFetch;
 
+    /** Every stream event as a typed function, like `LixnetClient.caller`. */
+    public readonly caller: LixnetStreamCaller<Events>;
+
     public constructor({ rpcUrl, fetch }: LixnetClientOptions) {
         this.rpcUrl = rpcUrl;
         this.fetcher = fetch;
+        this.caller = createCaller((event, ...args) => this.call(event as keyof Events, ...(args as any)));
     }
 
     /** Resolves when the stream ends; throws if the server returns or streams an error. */

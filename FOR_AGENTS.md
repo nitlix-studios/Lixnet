@@ -247,6 +247,7 @@ From the package entrypoint:
     - `StandardSchemaV1`
     - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes`, `LixnetRoutesOption` (inferred contract)
     - `LixnetFetch`, `LixnetClientOptions` (client `fetch` option)
+    - `LixnetCaller`, `LixnetStreamCaller` (`client.caller`)
     - `LixnetStreamInjections`, `LixnetPeerInjections`, `LixnetPeerCallOptions`
     - `LixnetServerBaseOptions`, `LixnetCorsOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
     - `LXN_ServerClient_EventType`
@@ -509,6 +510,7 @@ export default {
     - JSON body `{ event, input }`
     - header `Content-Type: application/json`
     - accepts user-provided `RequestInit` `options` (credentials, mode, signal, ...); `headers` are merged with the default `Content-Type`, and `method`/`body` are always set by Lixnet
+- `client.caller` is a Proxy with one typed function per event (`caller.greet(input, options)` is `call("greet", input, options)`). Functions are cached per name, destructuring works, and `then`/symbols read as `undefined` so it isn't treated as a thenable. `LixnetStreamClient.caller` does the same with stream options.
 - Expects JSON response shaped like:
     - `{ error: string }` OR `{ data: any }`
 - Throws `Error(json.error)` when `error` exists, otherwise returns `data`.

@@ -408,6 +408,21 @@ const client = new LixnetClient<typeof server>({
 
 `LixnetStreamClient` takes the same option.
 
+### Caller (`client.caller`)
+
+Every event as a typed function: names autocomplete, input is checked and the result is inferred. Same arguments as `call` (`input`, then `RequestInit` options).
+
+```ts
+const { caller } = rpcClient;
+
+const data = await caller.helloThere({ name: "World" }); // { message: string }
+await caller.live(); // input omitted: live takes no client input
+
+const { helloThere } = caller; // destructuring works
+```
+
+`LixnetStreamClient` has one too: `await streamClient.caller.generate({ prompt }, { onStreamChunk })`. An event named `then` can only be called with `call(...)`, so the caller is never mistaken for a Promise.
+
 ## Handlers: `request` and `response`
 
 Handler signature is:

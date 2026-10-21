@@ -1,5 +1,6 @@
 import type {
     FunctionInput,
+    FunctionOutput,
     LXNCallArgs,
     LXN_ServerClient_EventType,
     LixnetClientOptions,
@@ -7,11 +8,19 @@ import type {
 } from "./types";
 import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
+import createCaller from "./util/createCaller";
 import { LixnetError, codeForStatus, errorFromBody } from "./error";
 
 type ExtractRPCResponse<T> = T extends (...args: any) => infer R
     ? Awaited<R>
     : never;
+
+/** One function per event: `caller.greet({ name })` is `client.call("greet", { name })`. */
+export type LixnetCaller<Events> = {
+    [K in keyof Events]: (
+        ...args: LXNCallArgs<FunctionInput<Events[K]>, RequestInit>
+    ) => Promise<FunctionOutput<Events[K]>>;
+};
 
 /** `Contract` is either an events contract or `typeof server` for a server built with `.route(...)`. */
 export default class LixnetClient<
@@ -21,9 +30,17 @@ export default class LixnetClient<
     private rpcUrl: string;
     private fetcher?: LixnetFetch;
 
+    /**
+     * Every event as a typed function: `await client.caller.greet({ name: "World" })`.
+     * Destructuring works too (`const { greet } = client.caller`). An event named `then` can only
+     * be called through `call(...)`.
+     */
+    public readonly caller: LixnetCaller<Events>;
+
     public constructor({ rpcUrl, fetch }: LixnetClientOptions) {
         this.rpcUrl = rpcUrl;
         this.fetcher = fetch;
+        this.caller = createCaller((event, ...args) => this.call(event as keyof Events, ...(args as any)));
     }
 
     public async call<K extends keyof Events>(

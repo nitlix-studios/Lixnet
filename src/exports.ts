@@ -52,7 +52,8 @@ export type {
 } from "./lib/types";
 export type { LixnetPeerInjections } from "./lib/peerevents";
 export type { LixnetPeerCallOptions } from "./lib/peer";
-export type { LXNStreamCallOptions } from "./lib/streamclient";
+export type { LXNStreamCallOptions, LixnetStreamCaller } from "./lib/streamclient";
+export type { LixnetCaller } from "./lib/client";
 export type { LixnetServerBaseOptions } from "./lib/serverbase";
 export type { LixnetCorsOptions } from "./lib/util/cors";
 export type { StandardSchemaV1 } from "./lib/standardschema";
