@@ -146,6 +146,12 @@ const msg = await client.call("greet", { name: "World" });
 const sum = await client.call("add", { a: 1, b: 2 });
 ```
 
+`input` can be left out when the event has no required input fields (`live: () => ...` or `search: (input: { q?: string }) => ...`); Lixnet sends `{}`:
+
+```ts
+const me = await client.call("live");
+```
+
 If you need cookies/auth, pass `RequestInit` (example):
 
 ```ts

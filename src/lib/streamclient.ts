@@ -1,4 +1,9 @@
-import type { FunctionInput, FunctionOutput, LXN_ServerClient_EventType } from "./types";
+import type {
+    FunctionInput,
+    FunctionOutput,
+    LXNCallArgs,
+    LXN_ServerClient_EventType,
+} from "./types";
 import withJsonContentType from "./util/withJsonContentType";
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
@@ -21,8 +26,10 @@ export default class LixnetStreamClient<Events extends LXN_ServerClient_EventTyp
     /** Resolves when the stream ends; throws if the server returns or streams an error. */
     public async call<K extends keyof Events>(
         event: K,
-        input: FunctionInput<Events[K]>,
-        options: LXNStreamCallOptions<FunctionOutput<Events[K]>> = {}
+        ...[input, options = {}]: LXNCallArgs<
+            FunctionInput<Events[K]>,
+            LXNStreamCallOptions<FunctionOutput<Events[K]>>
+        >
     ): Promise<void> {
         const { onStreamChunk, ...fetchOptions } = options;
 
@@ -30,7 +37,7 @@ export default class LixnetStreamClient<Events extends LXN_ServerClient_EventTyp
             ...fetchOptions,
             method: "POST",
             headers: withJsonContentType(fetchOptions.headers),
-            body: JSON.stringify({ event, input }),
+            body: JSON.stringify({ event, input: input === undefined ? {} : input }),
         });
 
         if (!response.ok) {

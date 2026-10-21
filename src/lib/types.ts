@@ -21,6 +21,11 @@ export type FunctionOutput<T> = T extends (...args: any) => infer R
     ? Awaited<R>
     : { _TYPE_ERROR_: "Event definition must be a function type" };
 
+/** `input` may be omitted when the event has no required input fields (e.g. `() => ...`). */
+export type LXNCallArgs<TInput, TOptions> = {} extends TInput
+    ? [input?: TInput, options?: TOptions]
+    : [input: TInput, options?: TOptions];
+
 export type LXNServerHandler<Input, Output> = (
     input: Input
 ) => Promise<Output> | Output;
