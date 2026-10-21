@@ -246,6 +246,7 @@ From the package entrypoint:
     - `LixnetError` (class), `LIXNET_ERROR_STATUS`, `LixnetErrorCode`, `LixnetIssue`
     - `StandardSchemaV1`
     - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes` (inferred contract)
+    - `LixnetFetch`, `LixnetClientOptions` (client `fetch` option)
     - `LixnetServerBaseOptions`, `LixnetCorsOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
     - `LXN_ServerClient_EventType`
     - `LXNServerHandler`
@@ -501,7 +502,7 @@ export default {
 
 `LixnetClient` is a minimal fetch wrapper:
 
-- Constructed with `{ rpcUrl }`.
+- Constructed with `{ rpcUrl, fetch? }`. `fetch` is any `(url, init) => Promise<Response>` (default: the global `fetch`, looked up per call and called unbound so native fetches don't throw "Illegal invocation"). Use `fetch: (url, init) => server.handle(new Request(url, init))` for in-process tests/SSR.
 - `call(event, input, options?)` sends:
     - method `POST`
     - JSON body `{ event, input }`

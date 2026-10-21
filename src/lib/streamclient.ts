@@ -3,6 +3,8 @@ import type {
     FunctionOutput,
     LXNCallArgs,
     LXN_ServerClient_EventType,
+    LixnetClientOptions,
+    LixnetFetch,
 } from "./types";
 import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
@@ -19,9 +21,11 @@ export default class LixnetStreamClient<
     Events extends LXN_ServerClient_EventType = InferLixnetEvents<Contract>
 > {
     private rpcUrl: string;
+    private fetcher?: LixnetFetch;
 
-    public constructor({ rpcUrl }: { rpcUrl: string }) {
+    public constructor({ rpcUrl, fetch }: LixnetClientOptions) {
         this.rpcUrl = rpcUrl;
+        this.fetcher = fetch;
     }
 
     /** Resolves when the stream ends; throws if the server returns or streams an error. */
@@ -34,7 +38,9 @@ export default class LixnetStreamClient<
     ): Promise<void> {
         const { onStreamChunk, ...fetchOptions } = options;
 
-        const response = await fetch(this.rpcUrl, {
+        // Called unbound: a native fetch invoked as a method of this client throws "Illegal invocation".
+        const send = this.fetcher ?? fetch;
+        const response = await send(this.rpcUrl, {
             ...fetchOptions,
             method: "POST",
             headers: withJsonContentType(fetchOptions.headers),

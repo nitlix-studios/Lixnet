@@ -42,6 +42,8 @@ export type {
     LixnetServerInjections,
     LXNStreamEmitter,
     LXNCallArgs,
+    LixnetFetch,
+    LixnetClientOptions,
 } from "./lib/types";
 export type { LXNStreamCallOptions } from "./lib/streamclient";
 export type { LixnetServerBaseOptions } from "./lib/serverbase";

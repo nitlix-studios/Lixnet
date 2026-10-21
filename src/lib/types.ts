@@ -32,6 +32,18 @@ export type LXNServerHandler<Input, Output> = (
 
 export type LXN_ServerClient_EventType = object;
 
+/**
+ * The `fetch` a client sends requests with. Any `fetch`-compatible function works, e.g. a
+ * wrapper adding auth, or `(url, init) => server.handle(new Request(url, init))` for tests and SSR.
+ */
+export type LixnetFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+export type LixnetClientOptions = {
+    rpcUrl: string;
+    /** Defaults to the global `fetch`, looked up on every call. */
+    fetch?: LixnetFetch;
+};
+
 /** A schema whose parsed output must match the event's declared input type. */
 export type LXNEventSchema<Events, K extends keyof Events> = StandardSchemaV1<
     any,

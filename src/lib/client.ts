@@ -1,4 +1,10 @@
-import type { FunctionInput, LXNCallArgs, LXN_ServerClient_EventType } from "./types";
+import type {
+    FunctionInput,
+    LXNCallArgs,
+    LXN_ServerClient_EventType,
+    LixnetClientOptions,
+    LixnetFetch,
+} from "./types";
 import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
 import { LixnetError, codeForStatus, errorFromBody } from "./error";
@@ -13,16 +19,20 @@ export default class LixnetClient<
     Events extends LXN_ServerClient_EventType = InferLixnetEvents<Contract>
 > {
     private rpcUrl: string;
+    private fetcher?: LixnetFetch;
 
-    public constructor({ rpcUrl }: { rpcUrl: string }) {
+    public constructor({ rpcUrl, fetch }: LixnetClientOptions) {
         this.rpcUrl = rpcUrl;
+        this.fetcher = fetch;
     }
 
     public async call<K extends keyof Events>(
         event: K,
         ...[input, options = {}]: LXNCallArgs<FunctionInput<Events[K]>, RequestInit>
     ): Promise<ExtractRPCResponse<Events[K]>> {
-        const response = await fetch(this.rpcUrl, {
+        // Called unbound: a native fetch invoked as a method of this client throws "Illegal invocation".
+        const send = this.fetcher ?? fetch;
+        const response = await send(this.rpcUrl, {
             ...options,
             method: "POST",
             headers: withJsonContentType(options.headers),

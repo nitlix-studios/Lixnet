@@ -390,8 +390,21 @@ export default {
 ```ts
 const client = new LixnetClient<Events>({
     rpcUrl: "https://api.example.com/rpc",
+    // optional: any fetch-compatible function (defaults to the global fetch)
+    fetch: (url, init) => fetch(url, { ...init, credentials: "include" }),
 });
 ```
+
+`fetch` is also how you test or SSR without a network or patching `globalThis.fetch`:
+
+```ts
+const client = new LixnetClient<typeof server>({
+    rpcUrl: "http://local/rpc",
+    fetch: (url, init) => server.handle(new Request(url, init)),
+});
+```
+
+`LixnetStreamClient` takes the same option.
 
 ## Handlers: `request` and `response`
 
