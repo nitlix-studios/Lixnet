@@ -43,6 +43,7 @@ It’s designed to be minimal: no codegen, no schema registry, no client bundler
 - [Framework adapters (server wiring)](#framework-adapters-server-wiring)
 - [Inferred contract (`server.route`)](#inferred-contract-serverroute)
 - [Server: `LixnetServer`](#server-lixnetserver)
+- [Errors](#errors-lixneterror)
 - [CORS](#cors)
 - [Client: `LixnetClient`](#client-lixnetclient)
 - [Handlers: `request` and `response`](#handlers-request-and-response)
@@ -260,7 +261,7 @@ Responses are JSON and shaped as either:
 or
 
 ```json
-{ "error": "..." }
+{ "error": "...", "code": "UNAUTHORIZED", "data": {} }
 ```
 
 ### Server configuration
@@ -281,6 +282,57 @@ const server = new LixnetServer<Events>({
     },
 });
 ```
+
+## Errors (`LixnetError`)
+
+Throw a `LixnetError` from a handler to send a specific error; the client throws it back with the same `code`, `status` and `data`:
+
+```ts
+import { LixnetError } from "lixnet";
+
+// server
+throw new LixnetError("UNAUTHORIZED", "Session expired");
+throw new LixnetError("TOO_MANY_REQUESTS", "Slow down", { data: { retryAfter: 30 } });
+throw new LixnetError("PLAN_LIMIT", "Upgrade your plan", { status: 402 }); // custom code
+
+// client
+try {
+    await client.call("me");
+} catch (e) {
+    if (LixnetError.is(e) && e.code === "UNAUTHORIZED") redirect("/login");
+}
+```
+
+- Built-in codes and their default statuses (`LIXNET_ERROR_STATUS`): `BAD_REQUEST` 400, `INVALID_INPUT` 400, `UNAUTHORIZED` 401, `FORBIDDEN` 403, `NOT_FOUND` 404, `CONFLICT` 409, `TOO_MANY_REQUESTS` 429, `INTERNAL` 500. Any other string works as a code (default status 400).
+- `LixnetError.is(e)` is preferred over `instanceof`: it also works when two copies of Lixnet end up in one bundle.
+- Every client error is a `LixnetError` (it extends `Error`, so `e.message` is unchanged), including non-Lixnet responses such as a proxy's HTML 502.
+- For errors the caller is expected to handle as part of the result, returning a typed union (`{ ok: false, ... }`) is still the better fit; `LixnetError` is for cross-cutting cases (auth, permissions, rate limits, validation).
+- `response.code(403); response.error("Forbidden")` still works; the code is derived from the status (`FORBIDDEN`), or pass one: `response.error("Forbidden", { code: "NO_ACCESS" })`.
+
+Built-in errors (both servers, same messages as before plus a `code`):
+
+| `error` | `code` | Status |
+| --- | --- | --- |
+| `"Invalid JSON"` | `BAD_REQUEST` | 400 |
+| `"Invalid request body"` | `BAD_REQUEST` | 400 |
+| `"Event not found"` (missing `event`) | `BAD_REQUEST` | 400 |
+| `"Input not found"` | `BAD_REQUEST` | 400 |
+| `"Event not found"` (unknown `event`) | `NOT_FOUND` | 404 |
+| `"Invalid input"` (schema failure) | `INVALID_INPUT` | 400 |
+| `"Origin not allowed"` (with `cors`) | `FORBIDDEN` | 403 |
+| `"Handler error"` (handler threw a non-`LixnetError`) | `INTERNAL` | 500 |
+
+`INVALID_INPUT` always includes the validation issues, so forms can show errors per field:
+
+```json
+{
+    "error": "Invalid input",
+    "code": "INVALID_INPUT",
+    "data": { "issues": [{ "path": ["email"], "message": "Invalid email address" }] }
+}
+```
+
+Error responses always go through the formatter, so `defaultHeaders` and CORS headers are included. Keep the `error` strings stable; match on `code` in new code.
 
 ## CORS
 
@@ -317,7 +369,7 @@ export default {
 `client.call(event, input, options?)`:
 
 - sends a `POST` with `{ event, input }`
-- throws `Error(...)` when the response contains `{ error }`
+- throws a `LixnetError` (with `code`, `status`, `data`) when the response contains `{ error }`; see "Errors" below
 - otherwise returns `{ data }`’s value
 
 ### Client creation

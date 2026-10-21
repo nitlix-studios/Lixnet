@@ -230,6 +230,8 @@ From the package entrypoint:
     - `LixnetStreamServer`, `LixnetStreamClient`
     - `LixnetResponse`
 - **Types**
+    - `LixnetError` (class), `LIXNET_ERROR_STATUS`, `LixnetErrorCode`, `LixnetIssue`
+    - `StandardSchemaV1`
     - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes` (inferred contract)
     - `LixnetServerBaseOptions`, `LixnetCorsOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
     - `LXN_ServerClient_EventType`
@@ -371,8 +373,10 @@ Outbound:
 - Error:
 
 ```json
-{ "error": "string" }
+{ "error": "string", "code": "STRING", "data": {}, "detail": "string" }
 ```
+
+`code` is always present; `data` only when the error carries data; `detail` only with `exposeErrors`.
 
 ### Response formatting
 
@@ -389,37 +393,61 @@ Formatting is intentionally pluggable:
 
 Cookie values are written with `encodeURIComponent` (and decoded again by `request.cookies()`), so any string is safe to store. Cookie names must be RFC 6265 tokens and `path`/`domain` must not contain `;`, CR or LF; `response.cookie(...)` / `response.deleteCookie(...)` throw immediately otherwise, so the failure surfaces as a handler error instead of breaking response formatting.
 
-### Error behavior (important for compatibility)
+### Errors (`LixnetError`)
 
-`LixnetServer.handle(...)` and `LixnetStreamServer.handle(...)` share the same parsing and return the same string errors with the same status codes:
-
-| Error | Status |
-| --- | --- |
-| `"Invalid JSON"` | 400 |
-| `"Invalid request body"` | 400 |
-| `"Event not found"` (missing `event`) | 400 |
-| `"Input not found"` | 400 |
-| `"Event not found"` (unknown `event`) | 404 |
-| `"Invalid input"` (schema failure) | 400 |
-| `"Handler error"` (handler threw) | 500 |
-
-Error responses always go through the formatter, so `defaultHeaders` (e.g. CORS) are included.
-
-Handlers can return their own errors with a custom status:
+Throw a `LixnetError` from a handler to send a specific error; the client throws it back with the same `code`, `status` and `data`:
 
 ```ts
-handler: async ({ response }) => {
-    response.code(403);
-    response.error("Forbidden");
-},
+import { LixnetError } from "lixnet";
+
+// server
+throw new LixnetError("UNAUTHORIZED", "Session expired");
+throw new LixnetError("TOO_MANY_REQUESTS", "Slow down", { data: { retryAfter: 30 } });
+throw new LixnetError("PLAN_LIMIT", "Upgrade your plan", { status: 402 }); // custom code
+
+// client
+try {
+    await client.call("me");
+} catch (e) {
+    if (LixnetError.is(e) && e.code === "UNAUTHORIZED") redirect("/login");
+}
 ```
 
-If you change these strings, you may break downstream consumers that match on them. Prefer adding structured error codes later (new field) rather than changing the existing `error` string.
+- Built-in codes and their default statuses (`LIXNET_ERROR_STATUS`): `BAD_REQUEST` 400, `INVALID_INPUT` 400, `UNAUTHORIZED` 401, `FORBIDDEN` 403, `NOT_FOUND` 404, `CONFLICT` 409, `TOO_MANY_REQUESTS` 429, `INTERNAL` 500. Any other string works as a code (default status 400).
+- `LixnetError.is(e)` is preferred over `instanceof`: it also works when two copies of Lixnet end up in one bundle.
+- Every client error is a `LixnetError` (it extends `Error`, so `e.message` is unchanged), including non-Lixnet responses such as a proxy's HTML 502.
+- For errors the caller is expected to handle as part of the result, returning a typed union (`{ ok: false, ... }`) is still the better fit; `LixnetError` is for cross-cutting cases (auth, permissions, rate limits, validation).
+- `response.code(403); response.error("Forbidden")` still works; the code is derived from the status (`FORBIDDEN`), or pass one: `response.error("Forbidden", { code: "NO_ACCESS" })`.
+
+Built-in errors (both servers, same messages as before plus a `code`):
+
+| `error` | `code` | Status |
+| --- | --- | --- |
+| `"Invalid JSON"` | `BAD_REQUEST` | 400 |
+| `"Invalid request body"` | `BAD_REQUEST` | 400 |
+| `"Event not found"` (missing `event`) | `BAD_REQUEST` | 400 |
+| `"Input not found"` | `BAD_REQUEST` | 400 |
+| `"Event not found"` (unknown `event`) | `NOT_FOUND` | 404 |
+| `"Invalid input"` (schema failure) | `INVALID_INPUT` | 400 |
+| `"Origin not allowed"` (with `cors`) | `FORBIDDEN` | 403 |
+| `"Handler error"` (handler threw a non-`LixnetError`) | `INTERNAL` | 500 |
+
+`INVALID_INPUT` always includes the validation issues, so forms can show errors per field:
+
+```json
+{
+    "error": "Invalid input",
+    "code": "INVALID_INPUT",
+    "data": { "issues": [{ "path": ["email"], "message": "Invalid email address" }] }
+}
+```
+
+Error responses always go through the formatter, so `defaultHeaders` and CORS headers are included. Keep the `error` strings stable; match on `code` in new code.
 
 ### Debugging errors
 
 - `debugLog: true` logs every failed request through `logger` (default: `console.error`), including the event name and the underlying exception or validation error as `cause`.
-- `exposeErrors: true` adds that error's message to the response as `{ error, detail }`. `LixnetClient` then throws `Error(error, { cause: detail })`. Keep it off in production: exception messages can leak internals.
+- `exposeErrors: true` adds that error's message to the response as `{ error, detail }`. `LixnetClient` then throws a `LixnetError` with `cause: detail`. Keep it off in production: exception messages can leak internals.
 - The `error` string itself never changes, so code matching on `"Handler error"` keeps working.
 
 ### CORS

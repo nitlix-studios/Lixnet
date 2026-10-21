@@ -1,4 +1,15 @@
 import type { LixnetResponse } from "./response";
+import { codeForStatus } from "../error";
+
+/** The `{ error, code, data?, detail? }` body for an errored response (also used for stream error frames). */
+export function errorBody(response: LixnetResponse) {
+    return {
+        error: response.responseError,
+        code: response.responseErrorCode ?? codeForStatus(response.responseCode || 500),
+        ...(response.responseErrorData !== undefined ? { data: response.responseErrorData } : {}),
+        ...(response.responseErrorDetail ? { detail: response.responseErrorDetail } : {}),
+    };
+}
 
 /** Defaults, then staged header sets/deletes, then staged cookies as `Set-Cookie`. */
 export function buildResponseHeaders(
@@ -55,10 +66,7 @@ export default function (defaultHeaders: Record<string, string>) {
         const headers = buildResponseHeaders(this, defaultHeaders, "application/json");
 
         if (this.responseError) {
-            return Response.json({
-                error: this.responseError,
-                ...(this.responseErrorDetail ? { detail: this.responseErrorDetail } : {}),
-            }, {
+            return Response.json(errorBody(this), {
                 status: this.responseCode || 500,
                 headers: headers,
             });

@@ -6,6 +6,7 @@ import LixnetPeer from "./lib/peer";
 import LixnetStreamServer from "./lib/streamserver";
 import LixnetStreamClient from "./lib/streamclient";
 import { LixnetResponse } from "./lib/util/response";
+import { LixnetError, LIXNET_ERROR_STATUS } from "./lib/error";
 
 export {
     LixnetServer,
@@ -14,7 +15,10 @@ export {
     LixnetStreamServer,
     LixnetStreamClient,
     LixnetResponse,
+    LixnetError,
+    LIXNET_ERROR_STATUS,
 };
+export type { LixnetErrorCode, LixnetIssue } from "./lib/error";
 export type { LixnetRoute, LixnetRoutes, InferLixnetEvents } from "./lib/router";
 export type {
     LixnetCookies,

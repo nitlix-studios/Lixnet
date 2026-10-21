@@ -2,6 +2,7 @@ import type { StandardSchemaV1 } from "./standardschema";
 import LixnetLog from "./util/log";
 import type { DebugLogger } from "./types";
 import type { LixnetResponse } from "./util/response";
+import { LixnetError, type LixnetErrorCode, type LixnetIssue } from "./error";
 import {
     type LixnetCorsOptions,
     assertCorsOptions,
@@ -29,9 +30,28 @@ export type LixnetServerBaseOptions = {
 
 type EventEntry = { event: PropertyKey; schema?: StandardSchemaV1 };
 
-type ParsedRpcRequest<TEntry> =
-    | { ok: true; entry: TEntry; input: any }
-    | { ok: false; error: string; status: number; cause?: unknown; event?: string };
+/** A failed request, before it's written to the response. */
+type Failure = {
+    error: string;
+    status: number;
+    code: LixnetErrorCode;
+    data?: unknown;
+    /** Logged with `debugLog`; its message becomes `detail` with `exposeErrors`. */
+    cause?: unknown;
+    event?: string;
+};
+
+type ParsedRpcRequest<TEntry> = { ok: true; entry: TEntry; input: any } | ({ ok: false } & Failure);
+
+function toIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): LixnetIssue[] {
+    return issues.map((issue) => ({
+        message: issue.message,
+        path: (issue.path ?? []).map((segment) => {
+            const key = typeof segment === "object" ? segment.key : segment;
+            return typeof key === "number" ? key : String(key);
+        }),
+    }));
+}
 
 function describeError(cause: unknown): string | undefined {
     if (cause === undefined) return undefined;
@@ -76,24 +96,30 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
         try {
             json = await request.json();
         } catch (cause) {
-            return { ok: false, error: "Invalid JSON", status: 400, cause };
+            return { ok: false, error: "Invalid JSON", status: 400, code: "BAD_REQUEST", cause };
         }
 
         if (json === null || typeof json !== "object" || Array.isArray(json)) {
-            return { ok: false, error: "Invalid request body", status: 400 };
+            return { ok: false, error: "Invalid request body", status: 400, code: "BAD_REQUEST" };
         }
 
         if (typeof json.event !== "string" || !json.event) {
-            return { ok: false, error: "Event not found", status: 400 };
+            return { ok: false, error: "Event not found", status: 400, code: "BAD_REQUEST" };
         }
 
         if (!("input" in json)) {
-            return { ok: false, error: "Input not found", status: 400 };
+            return { ok: false, error: "Input not found", status: 400, code: "BAD_REQUEST" };
         }
 
         // hasOwn so names like "constructor" or "toString" don't resolve to prototype members.
         if (!Object.hasOwn(this.events, json.event)) {
-            return { ok: false, error: "Event not found", status: 404, event: json.event };
+            return {
+                ok: false,
+                error: "Event not found",
+                status: 404,
+                code: "NOT_FOUND",
+                event: json.event,
+            };
         }
         const entry = this.events[json.event]!;
 
@@ -107,6 +133,9 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
                 ok: false,
                 error: "Invalid input",
                 status: 400,
+                code: "INVALID_INPUT",
+                // Validation messages are meant for the caller, so they're always sent.
+                data: { issues: toIssues(result.issues) },
                 cause: result.issues,
                 event: json.event,
             };
@@ -130,7 +159,12 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
 
         if (!isOriginAllowed(this.cors, origin)) {
             if (request.method === "OPTIONS") return new Response(null, { status: 403 });
-            return this.fail(response, { error: "Origin not allowed", status: 403, cause: origin });
+            return this.fail(response, {
+                error: "Origin not allowed",
+                status: 403,
+                code: "FORBIDDEN",
+                cause: origin,
+            });
         }
 
         if (request.method === "OPTIONS") {
@@ -148,10 +182,26 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
         return null;
     }
 
+    /** A `LixnetError` is sent as thrown; anything else becomes a generic 500 "Handler error". */
+    protected failureFromThrown(error: unknown, event: string): Failure {
+        if (LixnetError.is(error)) {
+            return {
+                error: error.message,
+                status: error.status,
+                code: error.code,
+                data: error.data,
+                cause: error.cause ?? error,
+                event,
+            };
+        }
+
+        return { error: "Handler error", status: 500, code: "INTERNAL", cause: error, event };
+    }
+
     /** Logs the failure (with `debugLog`) and stages it on the response with its status. */
     protected stageFailure(
         response: LixnetResponse,
-        { error, status, cause, event }: { error: string; status: number; cause?: unknown; event?: string }
+        { error, status, code, data, cause, event }: Failure
     ): void {
         if (this.debugLog) {
             this.logger({
@@ -162,13 +212,14 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
         }
 
         response.code(status);
-        response.error(error, this.exposeErrors ? describeError(cause) : undefined);
+        response.error(error, {
+            code,
+            data,
+            detail: this.exposeErrors ? describeError(cause) : undefined,
+        });
     }
 
-    protected fail(
-        response: LixnetResponse,
-        failure: { error: string; status: number; cause?: unknown; event?: string }
-    ): Response {
+    protected fail(response: LixnetResponse, failure: Failure): Response {
         this.stageFailure(response, failure);
         return response.format();
     }

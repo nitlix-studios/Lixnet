@@ -1,6 +1,7 @@
 import type { FunctionInput, LXNCallArgs, LXN_ServerClient_EventType } from "./types";
 import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
+import { LixnetError, codeForStatus, errorFromBody } from "./error";
 
 type ExtractRPCResponse<T> = T extends (...args: any) => infer R
     ? Awaited<R>
@@ -28,10 +29,19 @@ export default class LixnetClient<
             body: JSON.stringify({ event, input: input === undefined ? {} : input }),
         });
 
-        const json = await response.json();
+        const json = await response.json().catch(() => null);
 
-        if (json.error) {
-            throw new Error(json.error, json.detail ? { cause: json.detail } : undefined);
+        // Not a Lixnet response, e.g. a proxy's HTML error page.
+        if (json === null || typeof json !== "object") {
+            throw new LixnetError(
+                response.ok ? "BAD_RESPONSE" : codeForStatus(response.status),
+                `Unexpected response from ${this.rpcUrl} (status ${response.status})`,
+                { status: response.status }
+            );
+        }
+
+        if (typeof json.error === "string") {
+            throw errorFromBody(json, response.status);
         }
 
         return json.data;

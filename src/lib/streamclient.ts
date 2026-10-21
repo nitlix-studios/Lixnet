@@ -6,16 +6,13 @@ import type {
 } from "./types";
 import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
+import { LixnetError, codeForStatus, errorFromBody } from "./error";
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
 export type LXNStreamCallOptions<TChunk> = Prettify<{
     onStreamChunk?: (chunk: TChunk) => void;
 } & Omit<RequestInit, "method" | "body">>;
-
-function toError(frame: { error: string; detail?: string }): Error {
-    return new Error(frame.error, frame.detail ? { cause: frame.detail } : undefined);
-}
 
 export default class LixnetStreamClient<
     Contract extends LXN_ServerClient_EventType,
@@ -46,8 +43,12 @@ export default class LixnetStreamClient<
 
         if (!response.ok) {
             const json = await response.json().catch(() => null);
-            if (json && typeof json.error === "string") throw toError(json);
-            throw new Error(`Stream request failed with status ${response.status}`);
+            if (json && typeof json.error === "string") throw errorFromBody(json, response.status);
+            throw new LixnetError(
+                codeForStatus(response.status),
+                `Stream request failed with status ${response.status}`,
+                { status: response.status }
+            );
         }
 
         if (!response.body) throw new Error("Stream response has no body");
@@ -67,7 +68,7 @@ export default class LixnetStreamClient<
                 return; // skip malformed line
             }
 
-            if (typeof parsed?.error === "string") throw toError(parsed);
+            if (typeof parsed?.error === "string") throw errorFromBody(parsed);
             if (parsed?.stream === true) onStreamChunk?.(parsed.data);
         };
 

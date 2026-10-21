@@ -116,12 +116,7 @@ export default class LixnetServer<
 
             return response.format();
         } catch (error) {
-            return this.fail(response, {
-                error: "Handler error",
-                status: 500,
-                cause: error,
-                event: parsed.entry.event as string,
-            });
+            return this.fail(response, this.failureFromThrown(error, parsed.entry.event as string));
         }
     }
 }

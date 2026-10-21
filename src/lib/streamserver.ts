@@ -9,7 +9,7 @@ import type {
 } from "./types";
 import { LixnetResponse } from "./util/response";
 import { type LixnetRequest, createLixnetRequest } from "./util/request";
-import getDefaultFormatter, { buildResponseHeaders } from "./util/getDefaultFormatter";
+import getDefaultFormatter, { buildResponseHeaders, errorBody } from "./util/getDefaultFormatter";
 
 type LXNStreamServerEventInput<
     Events extends LXN_ServerClient_EventType,
@@ -119,12 +119,7 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
                     await event.handler({ ...validatedInput, request: newRequest, response, stream });
                     start();
                 } catch (error) {
-                    const failure = {
-                        error: "Handler error",
-                        status: 500,
-                        cause: error,
-                        event: event.event as string,
-                    };
+                    const failure = this.failureFromThrown(error, event.event as string);
 
                     if (!started) {
                         resolve(this.fail(response, failure));
@@ -133,12 +128,7 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 
                     // Headers are already sent, so report the error as the final frame.
                     this.stageFailure(response, failure);
-                    write({
-                        error: response.responseError,
-                        ...(response.responseErrorDetail
-                            ? { detail: response.responseErrorDetail }
-                            : {}),
-                    });
+                    write(errorBody(response));
                 } finally {
                     if (started && !closed) {
                         closed = true;

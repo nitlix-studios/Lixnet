@@ -31,6 +31,10 @@ export class LixnetResponse {
     public responseError: string | null = null;
     /** Extra error information, only sent when the server has `exposeErrors` enabled. */
     public responseErrorDetail: string | null = null;
+    /** Error code sent as `code`; derived from the status when not set. */
+    public responseErrorCode: string | null = null;
+    /** JSON-serialisable data sent with the error as `data`. */
+    public responseErrorData: unknown = undefined;
     public responseCode: number = 0;
     public responseHeaders: Record<string, string> = {};
     public responseHeaderDeletes: Set<string> = new Set();
@@ -60,8 +64,19 @@ export class LixnetResponse {
         this.responseHeaderDeletes.add(headerName.toLowerCase());
     }
 
-    public error(error: string, detail?: string): void {
+    /**
+     * Turns the response into an error. Prefer throwing a `LixnetError` from the handler; this is
+     * for staging one without throwing. A string second argument is the `detail` (legacy form).
+     */
+    public error(
+        error: string,
+        options?: string | { code?: string; data?: unknown; detail?: string }
+    ): void {
+        const { code, data, detail } =
+            typeof options === "string" ? { detail: options } : (options ?? {});
         this.responseError = error;
+        this.responseErrorCode = code ?? null;
+        this.responseErrorData = data;
         this.responseErrorDetail = detail ?? null;
     }
 
