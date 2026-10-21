@@ -1,4 +1,5 @@
 import type { FunctionInput, FunctionOutput, LXN_ServerClient_EventType } from "./types";
+import withJsonContentType from "./util/withJsonContentType";
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -21,10 +22,10 @@ export default class LixnetStreamClient<Events extends LXN_ServerClient_EventTyp
         const { onStreamChunk, ...fetchOptions } = options;
 
         const response = await fetch(this.rpcUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ event, input }),
             ...fetchOptions,
+            method: "POST",
+            headers: withJsonContentType(fetchOptions.headers),
+            body: JSON.stringify({ event, input }),
         });
 
         if (!response.body) throw new Error("Stream response has no body");

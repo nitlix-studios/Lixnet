@@ -366,7 +366,7 @@ At the moment, `debugLog` only logs “Invalid JSON” (see `src/lib/server.ts`)
     - method `POST`
     - JSON body `{ event, input }`
     - header `Content-Type: application/json`
-    - spreads user-provided `RequestInit` `options` last (so callers can override headers/mode/etc.)
+    - accepts user-provided `RequestInit` `options` (credentials, mode, signal, ...); `headers` are merged with the default `Content-Type`, and `method`/`body` are always set by Lixnet
 - Expects JSON response shaped like:
     - `{ error: string }` OR `{ data: any }`
 - Throws `Error(json.error)` when `error` exists, otherwise returns `data`.

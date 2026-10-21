@@ -1,4 +1,5 @@
 import type { FunctionInput, LXN_ServerClient_EventType } from "./types";
+import withJsonContentType from "./util/withJsonContentType";
 
 type ExtractRPCResponse<T> = T extends (...args: any) => infer R
     ? Awaited<R>
@@ -17,12 +18,10 @@ export default class LixnetClient<Events extends LXN_ServerClient_EventType> {
         options: RequestInit = {}
     ): Promise<ExtractRPCResponse<Events[K]>> {
         const response = await fetch(this.rpcUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ event, input }),
             ...options,
+            method: "POST",
+            headers: withJsonContentType(options.headers),
+            body: JSON.stringify({ event, input }),
         });
 
         const json = await response.json();
