@@ -3,6 +3,7 @@
 import LixnetServer from "./lib/server";
 import LixnetClient from "./lib/client";
 import LixnetPeer from "./lib/peer";
+import LixnetPeerEvents from "./lib/peerevents";
 import LixnetStreamServer from "./lib/streamserver";
 import LixnetStreamClient from "./lib/streamclient";
 import { LixnetResponse } from "./lib/util/response";
@@ -12,6 +13,7 @@ export {
     LixnetServer,
     LixnetClient,
     LixnetPeer,
+    LixnetPeerEvents,
     LixnetStreamServer,
     LixnetStreamClient,
     LixnetResponse,
@@ -48,6 +50,8 @@ export type {
     LixnetClientOptions,
     LixnetStreamInjections,
 } from "./lib/types";
+export type { LixnetPeerInjections } from "./lib/peerevents";
+export type { LixnetPeerCallOptions } from "./lib/peer";
 export type { LXNStreamCallOptions } from "./lib/streamclient";
 export type { LixnetServerBaseOptions } from "./lib/serverbase";
 export type { LixnetCorsOptions } from "./lib/util/cors";

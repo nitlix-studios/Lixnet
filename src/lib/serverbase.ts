@@ -2,7 +2,7 @@ import type { StandardSchemaV1 } from "./standardschema";
 import LixnetLog from "./util/log";
 import type { DebugLogger } from "./types";
 import type { LixnetResponse } from "./util/response";
-import { LixnetError, type LixnetErrorCode, type LixnetIssue } from "./error";
+import { LixnetError, type LixnetErrorCode, toIssues } from "./error";
 import {
     type LixnetCorsOptions,
     assertCorsOptions,
@@ -45,16 +45,6 @@ type Failure = {
 type ParsedRpcRequest<TEntry> =
     | { ok: true; entry: TEntry; input: any; body: string }
     | ({ ok: false } & Failure);
-
-function toIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): LixnetIssue[] {
-    return issues.map((issue) => ({
-        message: issue.message,
-        path: (issue.path ?? []).map((segment) => {
-            const key = typeof segment === "object" ? segment.key : segment;
-            return typeof key === "number" ? key : String(key);
-        }),
-    }));
-}
 
 function describeError(cause: unknown): string | undefined {
     if (cause === undefined) return undefined;

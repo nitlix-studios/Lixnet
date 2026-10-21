@@ -1,3 +1,5 @@
+import type { StandardSchemaV1 } from "./standardschema";
+
 /** Built-in error codes and their default HTTP statuses. Any other string is also a valid code. */
 export const LIXNET_ERROR_STATUS = {
     BAD_REQUEST: 400,
@@ -17,6 +19,17 @@ export type LixnetIssue = {
     path: (string | number)[];
     message: string;
 };
+
+/** Converts Standard Schema issues into the `LixnetIssue`s sent to the caller. */
+export function toIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): LixnetIssue[] {
+    return issues.map((issue) => ({
+        message: issue.message,
+        path: (issue.path ?? []).map((segment) => {
+            const key = typeof segment === "object" ? segment.key : segment;
+            return typeof key === "number" ? key : String(key);
+        }),
+    }));
+}
 
 const LIXNET_ERROR_BRAND = Symbol.for("lixnet.error");
 

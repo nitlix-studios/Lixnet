@@ -1,41 +1,50 @@
 import { LIXNET_ID_PREFIX } from "./vars";
+import type { InferLixnetEvents } from "./router";
+import type { LXNCallArgs } from "./types";
+import type LixnetPeerEvents from "./peerevents";
+import type { LixnetPeerEventEntry } from "./peerevents";
+import { LixnetError, errorFromBody, toIssues } from "./error";
 
 export type PeerEventInput<T> = T extends (input: infer TInput) => any
     ? TInput
     : never;
 
+type PeerEventOutput<T> = T extends (...args: any) => infer R ? Awaited<R> : never;
+
+export type LixnetPeerCallOptions<TOutput> = {
+    /** Called with the other peer's handler result. Without it, the event is fire-and-forget. */
+    callback?: ((data: TOutput) => any) | null;
+    /** Called instead of `callback` when the other peer rejects the call (e.g. invalid input). */
+    onError?: (error: LixnetError) => void;
+};
+
 function createLixnetId() {
     return LIXNET_ID_PREFIX + Math.random().toString(36).substring(2, 15);
 }
 
-type Caller<ThisToThereEvents extends Record<string, any>> = <
-    K extends keyof ThisToThereEvents
->(
+type Caller<Remote> = <K extends keyof Remote>(
     event: K,
-    input: PeerEventInput<ThisToThereEvents[K]>,
-    options?: {
-        callback:
-        | ((data: Awaited<ReturnType<ThisToThereEvents[K]>>) => any)
-        | null;
-    }
+    ...args: LXNCallArgs<PeerEventInput<Remote[K]>, LixnetPeerCallOptions<PeerEventOutput<Remote[K]>>>
 ) => Promise<void>;
 
+/**
+ * `ThisToThereEvents` is what this side can call: an events contract, or `typeof otherSideEvents`
+ * for a `LixnetPeerEvents`. `ThereToThisEvents` types the legacy `on(...)` handlers; with
+ * `events` passed to the constructor it isn't needed.
+ */
 export default class LixnetPeer<
-    ThisToThereEvents extends Record<string, any>,
-    ThereToThisEvents extends Record<string, any>,
+    ThisToThereEvents extends object,
+    ThereToThisEvents extends object = {},
     SocketType extends WebSocket = WebSocket
 > {
     socket: SocketType | null = null;
     rb: {
         [key: string]: {
-            method: keyof ThisToThereEvents;
-            callback: (
-                data: Awaited<
-                    ReturnType<ThisToThereEvents[keyof ThisToThereEvents]>
-                >
-            ) => any;
+            method: PropertyKey;
+            callback: (data: any) => any;
+            onError?: (error: LixnetError) => void;
         };
-    } = {} as any;
+    } = {};
     transmissionLimit: number = -1;
     transmissionChunksLimit: number = 20;
 
@@ -43,11 +52,14 @@ export default class LixnetPeer<
         this.transmissionChunksLimit = limit;
     }
 
-    public call: Caller<ThisToThereEvents> = async (
-        event,
-        data,
-        { callback } = { callback: null }
-    ) => {
+    public constructor({ events }: { events?: LixnetPeerEvents<any, any, any> } = {}) {
+        if (events) Object.assign(this.eventHandlers, events.entries);
+    }
+
+    public call: Caller<InferLixnetEvents<ThisToThereEvents>> = async (event, ...args) => {
+        const [input, { callback = null, onError } = {}] = args as [unknown, LixnetPeerCallOptions<any>?];
+        // Like LixnetClient, an omitted input is sent as `{}` so the other side's schema sees an object.
+        const data = input === undefined ? {} : input;
         if (!this.socket) throw new Error("LIXNET - Socket not set");
 
         let rf: string | null = null;
@@ -58,6 +70,7 @@ export default class LixnetPeer<
             this.rb[rf] = {
                 method: event,
                 callback: callback,
+                onError,
             };
         }
 
@@ -147,16 +160,8 @@ export default class LixnetPeer<
         return limits;
     }
 
-    private eventHandlers: Record<
-        keyof ThereToThisEvents,
-        (
-            input: PeerEventInput<
-                ThereToThisEvents[keyof ThereToThisEvents] & {
-                    socket: SocketType;
-                }
-            >
-        ) => ReturnType<ThereToThisEvents[keyof ThereToThisEvents]>
-    > = {} as any;
+    /** Handlers by event name, from `events` and `on(...)`. */
+    private eventHandlers: Record<PropertyKey, LixnetPeerEventEntry> = {};
 
     public setSocket(socket: SocketType) {
         this.socket = socket;
@@ -172,9 +177,9 @@ export default class LixnetPeer<
             input: PeerEventInput<ThereToThisEvents[K]> & {
                 socket: SocketType;
             }
-        ) => ReturnType<ThereToThisEvents[K]>
+        ) => PeerEventOutput<ThereToThisEvents[K]> | Promise<PeerEventOutput<ThereToThisEvents[K]>>
     ) {
-        this.eventHandlers[event] = handler as any;
+        this.eventHandlers[event] = { handler };
     }
 
     transmissions: Record<
@@ -183,7 +188,7 @@ export default class LixnetPeer<
             chunks: Record<number, string>;
             chunkTimes: Record<number, number>;
             chunkCount: number;
-            event: keyof ThereToThisEvents;
+            event: PropertyKey;
             rf: string | null;
         }
     > = {};
@@ -366,8 +371,13 @@ export default class LixnetPeer<
             const callback = this.rb[data.rb];
 
             if (callback) {
-                callback.callback(data.data);
                 delete this.rb[data.rb];
+                // Rejected by the other side: `{ rb, error: { error, code, data? } }`.
+                if (data.error && typeof data.error === "object") {
+                    callback.onError?.(errorFromBody(data.error));
+                } else {
+                    callback.callback(data.data);
+                }
             }
 
             return;
@@ -388,19 +398,39 @@ export default class LixnetPeer<
         rf,
         socket,
     }: {
-        eventName: keyof ThereToThisEvents;
-        data: PeerEventInput<ThereToThisEvents[keyof ThereToThisEvents]>;
+        eventName: PropertyKey;
+        data: unknown;
         rf: string | null;
         socket: SocketType;
     }) {
-        const eventHandler = this.eventHandlers[eventName];
+        // hasOwn so names like "constructor" don't resolve to prototype members.
+        if (!Object.hasOwn(this.eventHandlers, eventName)) return;
+        const { handler, schema } = this.eventHandlers[eventName]!;
 
-        if (!eventHandler) return;
+        if (schema) {
+            const result = await schema["~standard"].validate(data);
+            if (result.issues) {
+                if (rf) {
+                    socket.send(
+                        JSON.stringify({
+                            rb: rf,
+                            error: {
+                                error: "Invalid input",
+                                code: "INVALID_INPUT",
+                                data: { issues: toIssues(result.issues) },
+                            },
+                        })
+                    );
+                }
+                return;
+            }
+            data = result.value;
+        }
 
-        const result = await eventHandler({
+        const result = await handler({
             ...(typeof data === "object" ? data : {}),
             socket,
-        } as any);
+        });
 
         if (rf) {
             socket.send(

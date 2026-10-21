@@ -458,6 +458,45 @@ peer.on("ping", async ({ t, socket }) => {
 // peer.handle({ data: event.data, socket: ws });
 ```
 
+### Inferred events (`LixnetPeerEvents`)
+
+Like `routes` on `LixnetServer`, each side can define the events it handles as a `LixnetPeerEvents` object and let the other side infer everything with `import type`. Each events object only describes its own side, so both sides can import each other's types without a circular type (two peers typed directly from `typeof` each other would be).
+
+```ts
+// server/events.ts
+import { z } from "zod";
+import { LixnetPeerEvents } from "lixnet";
+
+export const serverEvents = new LixnetPeerEvents({
+    routes: {
+        hello: {
+            schema: z.object({ name: z.string() }),
+            handler: ({ name, socket }) => `Hello ${name}`,
+        },
+    },
+}).route("add", { handler: ({ a, b }: { a: number; b: number }) => a + b });
+
+// client/events.ts
+export const clientEvents = new LixnetPeerEvents().route("notify", {
+    handler: ({ message }: { message: string }) => console.log(message),
+});
+
+// server/socket.ts
+import type { clientEvents } from "../client/events";
+const peer = new LixnetPeer<typeof clientEvents>({ events: serverEvents });
+peer.call("notify", { message: "hi" });
+
+// client/socket.ts
+import type { serverEvents } from "../server/events";
+const peer = new LixnetPeer<typeof serverEvents>({ events: clientEvents });
+peer.call("hello", { name: "World" }, { callback: (greeting) => greeting /* string */ });
+```
+
+- `events` is an alias of `routes`, and `.route(...)` chains, exactly like `LixnetServer`. Handlers get `socket` next to their input.
+- With a schema, invalid input never reaches the handler; if the caller passed a `callback`, its `onError` gets a `LixnetError` with code `INVALID_INPUT`.
+- A handler can't use the other side's types through its events object (that would bring the cycle back). Return a value for callbacks, or call the other side from the file that creates the peer.
+- `LixnetPeer<ThisToThere, ThereToThis>` with `on(...)` keeps working.
+
 ### WebSocket setup (typical pattern)
 
 ```ts
@@ -501,7 +540,7 @@ From `src/exports.ts`:
 
 - **`LixnetServer`**
 - **`LixnetClient`**
-- **`LixnetPeer`**
+- **`LixnetPeer`**, **`LixnetPeerEvents`**
 - **`LixnetStreamServer`**, **`LixnetStreamClient`**
 - **`LixnetResponse`**
 
