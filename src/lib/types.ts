@@ -1,6 +1,6 @@
 import type { z } from "zod";
-import { LixnetRequest } from "./util/request";
-import { LixnetResponse } from "./util/response";
+import type { LixnetRequest } from "./util/request";
+import type { LixnetResponse } from "./util/response";
 
 export type DebugLogger = ({
     error,

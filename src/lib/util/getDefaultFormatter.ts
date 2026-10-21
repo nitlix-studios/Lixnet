@@ -1,4 +1,4 @@
-import { LixnetResponse } from "./response";
+import type { LixnetResponse } from "./response";
 
 /** Defaults, then staged header sets/deletes, then staged cookies as `Set-Cookie`. */
 export function buildResponseHeaders(

@@ -7,7 +7,15 @@ import LixnetStreamServer from "./lib/streamserver";
 import LixnetStreamClient from "./lib/streamclient";
 import { LixnetResponse } from "./lib/util/response";
 
-export { LixnetServer, LixnetClient, LixnetPeer, LixnetStreamServer, LixnetStreamClient, LixnetResponse };
+export {
+    LixnetServer,
+    LixnetClient,
+    LixnetPeer,
+    LixnetStreamServer,
+    LixnetStreamClient,
+    LixnetResponse,
+};
+export type { LixnetRoute, LixnetRoutes, InferLixnetEvents } from "./lib/router";
 export type {
     LixnetCookies,
     LixnetHeaders,

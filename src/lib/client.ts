@@ -1,11 +1,16 @@
 import type { FunctionInput, LXNCallArgs, LXN_ServerClient_EventType } from "./types";
+import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
 
 type ExtractRPCResponse<T> = T extends (...args: any) => infer R
     ? Awaited<R>
     : never;
 
-export default class LixnetClient<Events extends LXN_ServerClient_EventType> {
+/** `Contract` is either an events contract or `typeof server` for a server built with `.route(...)`. */
+export default class LixnetClient<
+    Contract extends LXN_ServerClient_EventType,
+    Events extends LXN_ServerClient_EventType = InferLixnetEvents<Contract>
+> {
     private rpcUrl: string;
 
     public constructor({ rpcUrl }: { rpcUrl: string }) {

@@ -162,9 +162,53 @@ await client.call(
 );
 ```
 
+## Inferred contract (`server.route`)
+
+Instead of writing an `Events` type by hand, chain `.route(...)` on the server and let the client infer everything from `typeof server`. Experimental: `Events` + `on()` keeps working and both can be used side by side.
+
+```ts
+// cloudflare/ioServer.ts (worker only)
+import { z } from "zod";
+import { LixnetServer } from "lixnet";
+import live from "./(functions)/live";
+
+export default function createRpcServer(options: { defaultHeaders?: Record<string, string> } = {}) {
+    return new LixnetServer(options)
+        .route("helloThere", {
+            schema: z.object({ name: z.string() }),
+            handler: ({ name }) => ({ message: `Hello ${name}` }),
+        })
+        // no schema: input is the handler's parameter type minus request/response
+        .route("live", { handler: live });
+}
+
+export type RpcServer = ReturnType<typeof createRpcServer>;
+```
+
+```ts
+// cloudflare/io.ts (browser)
+import type { RpcServer } from "./ioServer"; // type-only: erased at build time
+import { LixnetClient } from "lixnet";
+
+export const rpcClient = new LixnetClient<RpcServer>({ rpcUrl: "/rpc" });
+
+await rpcClient.call("helloThere", { name: "World" }); // { message: string }
+await rpcClient.call("live"); // input omitted: live takes no client input
+```
+
+- With a schema, the handler receives the schema's output and the client sends the schema's input (so `z.string().transform(Number)` means the client sends a string).
+- Without a schema, annotate the handler's parameter; `request`/`response` are removed from the client input. Anything else in that parameter (e.g. an optional `db`) becomes client input, so keep server-only values out of handler params.
+
+Keeping server code out of the client:
+
+- Always `import type` the server type. Enable `verbatimModuleSyntax` (or the `consistent-type-imports` lint rule) so an accidental value import fails instead of bundling the worker (sharp, wasm, ...) into the browser.
+- The bundle is safe either way, but type-checking still follows the import into the server files. Keep `ioServer.ts` thin (it imports handlers only) and give handlers explicit return types, so the client's tsconfig doesn't have to resolve worker-only types.
+- If the client tsconfig still can't resolve worker types, emit declarations from the worker project (`tsc --emitDeclarationOnly`) and `import type` from the generated `.d.ts`.
+
 ## Agent playbook (how to “act”)
 
-- **Add a new HTTP RPC**:
+- **Add a new HTTP RPC** (inferred contract): add a `.route("name", { schema?, handler })` to the server chain; the client picks it up through `typeof server`.
+- **Add a new HTTP RPC** (`Events` contract):
     - Add a new key to your `Events` type.
     - Register it via `server.on({ event: "...", schema?, handler })`.
     - Call it with `client.call("...", input)`.
@@ -183,8 +227,11 @@ From the package entrypoint:
     - `LixnetServer`
     - `LixnetClient`
     - `LixnetPeer`
+    - `LixnetStreamServer`, `LixnetStreamClient`
     - `LixnetResponse`
 - **Types**
+    - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes` (inferred contract)
+    - `LixnetServerBaseOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
     - `LXN_ServerClient_EventType`
     - `LXNServerHandler`
     - `FunctionInput`

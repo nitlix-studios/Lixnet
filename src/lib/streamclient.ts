@@ -4,6 +4,7 @@ import type {
     LXNCallArgs,
     LXN_ServerClient_EventType,
 } from "./types";
+import type { InferLixnetEvents } from "./router";
 import withJsonContentType from "./util/withJsonContentType";
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
@@ -16,7 +17,10 @@ function toError(frame: { error: string; detail?: string }): Error {
     return new Error(frame.error, frame.detail ? { cause: frame.detail } : undefined);
 }
 
-export default class LixnetStreamClient<Events extends LXN_ServerClient_EventType> {
+export default class LixnetStreamClient<
+    Contract extends LXN_ServerClient_EventType,
+    Events extends LXN_ServerClient_EventType = InferLixnetEvents<Contract>
+> {
     private rpcUrl: string;
 
     public constructor({ rpcUrl }: { rpcUrl: string }) {

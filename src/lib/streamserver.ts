@@ -8,7 +8,7 @@ import type {
     LXNStreamEmitter,
 } from "./types";
 import { LixnetResponse } from "./util/response";
-import { LixnetRequest, createLixnetRequest } from "./util/request";
+import { type LixnetRequest, createLixnetRequest } from "./util/request";
 import getDefaultFormatter, { buildResponseHeaders } from "./util/getDefaultFormatter";
 
 type LXNStreamServerEventInput<
@@ -31,7 +31,7 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 > {
     private errorFormatter: (this: LixnetResponse) => Response;
 
-    public constructor(options: LixnetServerBaseOptions) {
+    public constructor(options: LixnetServerBaseOptions = {}) {
         super(options);
         this.errorFormatter = getDefaultFormatter(this.defaultHeaders);
     }
