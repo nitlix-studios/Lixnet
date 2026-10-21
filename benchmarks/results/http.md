@@ -8,18 +8,18 @@ Higher req/s is better. 64 concurrent keep-alive connections, 5s per run after 1
 
 | framework | req/s | p50 | p99 | errors |
 | --- | --- | --- | --- | --- |
-| lixnet | 54,435 | 1.06 ms | 2.47 ms | 0 |
-| trpc | 73,023 | 0.74 ms | 2.01 ms | 0 |
-| orpc | 99,671 | 0.57 ms | 1.37 ms | 0 |
-| hono | 131,074 | 0.43 ms | 1.09 ms | 0 |
-| raw fetch | 131,758 | 0.52 ms | 1.11 ms | 0 |
+| lixnet | 137,280 | 0.46 ms | 0.95 ms | 0 |
+| trpc | 73,225 | 0.75 ms | 1.91 ms | 0 |
+| orpc | 103,922 | 0.55 ms | 1.31 ms | 0 |
+| hono | 133,821 | 0.43 ms | 1.09 ms | 0 |
+| raw fetch | 130,845 | 0.52 ms | 1.11 ms | 0 |
 
 ## echo 100 items (zod)
 
 | framework | req/s | p50 | p99 | errors |
 | --- | --- | --- | --- | --- |
-| lixnet | 17,372 | 3.50 ms | 7.04 ms | 0 |
-| trpc | 16,013 | 3.86 ms | 7.70 ms | 0 |
-| orpc | 13,112 | 4.77 ms | 9.37 ms | 0 |
-| hono | 22,868 | 2.72 ms | 5.41 ms | 0 |
-| raw fetch | 22,690 | 2.64 ms | 5.31 ms | 0 |
+| lixnet | 25,657 | 2.45 ms | 4.84 ms | 0 |
+| trpc | 16,466 | 3.75 ms | 7.42 ms | 0 |
+| orpc | 14,126 | 4.44 ms | 8.76 ms | 0 |
+| hono | 23,681 | 2.65 ms | 5.21 ms | 0 |
+| raw fetch | 24,097 | 2.52 ms | 5.03 ms | 0 |

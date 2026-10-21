@@ -31,20 +31,22 @@ Apple M5 Pro, Bun 1.4.3, 2026-10-21. Full tables in `results/`.
 
 | | lixnet | trpc | orpc | hono | raw |
 | --- | --- | --- | --- | --- | --- |
-| Client bundle (gzip) | **0.79 KB** | 6.07 KB | 8.09 KB | 2.04 KB | – |
-| Server bundle (gzip, zod external) | **3.93 KB** | 14.00 KB | 11.36 KB | 8.95 KB | – |
-| Round-trip `greet`, in-process | **1.69 µs** | 13.11 µs | 6.06 µs | 2.26 µs | 0.97 µs |
-| Cold start @ 500 routes | **9.5 ms** | 15 ms | 13 ms | 13 ms | 9.1 ms |
-| `tsc` @ 500 routes (TS 5.9, `routes` option) | **0.63 s** | 0.67 s | 0.72 s | 3.88 s | – |
-| HTTP `greet` req/s | 54k ⚠️ | 73k | 100k | 131k | 132k |
-| HTTP `echo` req/s | 17k | 16k | 13k | 23k | 23k |
+| Client bundle (gzip) | **0.90 KB** | 6.07 KB | 8.09 KB | 2.04 KB | – |
+| Server bundle (gzip, zod external) | **4.06 KB** | 14.00 KB | 11.36 KB | 8.95 KB | – |
+| Round-trip `greet`, in-process | **1.50 µs** | 13.02 µs | 5.93 µs | 2.03 µs | 0.93 µs |
+| Cold start @ 500 routes | **9.9 ms** | 15 ms | 13 ms | 13 ms | 8.2 ms |
+| `tsc` @ 500 routes (TS 5.9, `routes` option) | 0.64 s | **0.61 s** | 0.64 s | 3.76 s | – |
+| HTTP `greet` req/s | **137k** | 73k | 104k | 134k | 131k |
+| HTTP `echo` req/s | **26k** | 16k | 14k | 24k | 24k |
+
+Bold is the best framework per row (raw fetch is the floor, not a contender).
 
 ## Known issues these benchmarks surfaced
 
-1. ~~**HTTP throughput: `request.clone()` in `LixnetServer.handle`.**~~ Fixed: the body is read once and handlers re-read it from memory. `greet` went from ~54k to ~106–126k req/s (above Hono in the same runs); the headline table above predates the fix.
-2. **Type-check: `.route(...)` chains are quadratic.** 500 chained routes cost 10.5M instantiations (30x the `routes` option) and 3.6 s. Each call re-instantiates `LixnetServer<…, Routes & Record<K, …>>`.
-3. **Type-check: `Events` contract + `on()` slows past ~200 routes.** Few instantiations, but 2.4 s at 500 routes (TS 5.9): each `on()` call is checked against the union of every event's entry type.
-4. ~~`LixnetClient` has no `fetch` option.~~ Fixed: `LixnetClient` and `LixnetStreamClient` take `fetch`.
+1. ~~**HTTP throughput: `request.clone()` in `LixnetServer.handle`.**~~ Fixed in 1.6.0: the body is read once and handlers re-read it from memory. `greet` went from 54k to 137k req/s.
+2. **Type-check: `.route(...)` chains are quadratic.** 500 chained routes cost 10.5M instantiations (30x the `routes` option) and 3.1 s. The server chain itself is cheap; the cost is in each `client.call(...)`, which grows with the number of routes. Flattening the routes or recording the chain as a union didn't help. Use the `routes` option for large servers.
+3. **Type-check: `Events` contract + `on()` slows past ~200 routes.** Few instantiations, but 2.7 s at 500 routes (TS 5.9): each `on()` call is checked against the union of every event's entry type.
+4. ~~`LixnetClient` has no `fetch` option.~~ Fixed in 1.6.0: `LixnetClient` and `LixnetStreamClient` take `fetch`.
 
 ## Caveats
 
