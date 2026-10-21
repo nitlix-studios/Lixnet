@@ -29,6 +29,8 @@ function assertCookie(cookieName: string, options?: CookieBaseOptions): void {
 export class LixnetResponse {
     public responseData: any;
     public responseError: string | null = null;
+    /** Extra error information, only sent when the server has `exposeErrors` enabled. */
+    public responseErrorDetail: string | null = null;
     public responseCode: number = 0;
     public responseHeaders: Record<string, string> = {};
     public responseHeaderDeletes: Set<string> = new Set();
@@ -58,8 +60,9 @@ export class LixnetResponse {
         this.responseHeaderDeletes.add(headerName.toLowerCase());
     }
 
-    public error(error: string): void {
+    public error(error: string, detail?: string): void {
         this.responseError = error;
+        this.responseErrorDetail = detail ?? null;
     }
 
     public code(code: number): void {

@@ -25,3 +25,4 @@ export type {
     LXNStreamEmitter,
 } from "./lib/types";
 export type { LXNStreamCallOptions } from "./lib/streamclient";
+export type { LixnetServerBaseOptions } from "./lib/serverbase";

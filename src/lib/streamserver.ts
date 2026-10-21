@@ -1,6 +1,5 @@
-import LixnetServerBase from "./serverbase";
+import LixnetServerBase, { type LixnetServerBaseOptions } from "./serverbase";
 import type {
-    DebugLogger,
     FunctionInput,
     FunctionOutput,
     LXN_ServerClient_EventType,
@@ -32,17 +31,9 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 > {
     private errorFormatter: (this: LixnetResponse) => Response;
 
-    public constructor({
-        debugLog = false,
-        logger,
-        defaultHeaders = {},
-    }: {
-        debugLog?: boolean;
-        logger?: DebugLogger;
-        defaultHeaders?: Record<string, string>;
-    }) {
-        super({ debugLog, logger, defaultHeaders });
-        this.errorFormatter = getDefaultFormatter(defaultHeaders);
+    public constructor(options: LixnetServerBaseOptions) {
+        super(options);
+        this.errorFormatter = getDefaultFormatter(this.defaultHeaders);
     }
 
     public on<K extends keyof Events & string>(
@@ -63,10 +54,7 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 
         const parsed = await this.parse(request);
         if (!parsed.ok) {
-            if (parsed.error === "Invalid JSON" && this.debugLog) {
-                this.logger({ error: true, message: "Invalid JSON" });
-            }
-            return this.fail(response, parsed.error, parsed.status);
+            return this.fail(response, parsed);
         }
 
         const event = parsed.entry;
@@ -91,8 +79,8 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
         (async () => {
             try {
                 await event.handler({ ...validatedInput, request: newRequest, response, stream });
-            } catch {
-                if (this.debugLog) this.logger({ error: true, message: "Stream handler error" });
+            } catch (error) {
+                if (this.debugLog) this.logger({ error: true, message: "Stream handler error", cause: error });
             } finally {
                 streamController.close();
             }

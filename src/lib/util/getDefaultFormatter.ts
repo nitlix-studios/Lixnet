@@ -46,6 +46,7 @@ export default function (defaultHeaders: Record<string, string>) {
         if (this.responseError) {
             return Response.json({
                 error: this.responseError,
+                ...(this.responseErrorDetail ? { detail: this.responseErrorDetail } : {}),
             }, {
                 status: this.responseCode || 500,
                 headers: headers,

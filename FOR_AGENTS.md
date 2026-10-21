@@ -363,9 +363,11 @@ handler: async ({ response }) => {
 
 If you change these strings, you may break downstream consumers that match on them. Prefer adding structured error codes later (new field) rather than changing the existing `error` string.
 
-### Observability caveat
+### Debugging errors
 
-At the moment, `debugLog` only logs “Invalid JSON” (see `src/lib/server.ts`). Handler errors are mapped to `"Handler error"` without logging the original exception. If you improve this, do it additively (e.g. optional logger hook) to avoid leaking sensitive details by default.
+- `debugLog: true` logs every failed request through `logger` (default: `console.error`), including the event name and the underlying exception or validation error as `cause`.
+- `exposeErrors: true` adds that error's message to the response as `{ error, detail }`. `LixnetClient` then throws `Error(error, { cause: detail })`. Keep it off in production: exception messages can leak internals.
+- The `error` string itself never changes, so code matching on `"Handler error"` keeps working.
 
 ### Default headers
 

@@ -1,6 +1,5 @@
-import LixnetServerBase from "./serverbase";
+import LixnetServerBase, { type LixnetServerBaseOptions } from "./serverbase";
 import type {
-    DebugLogger,
     FunctionInput,
     FunctionOutput,
     LXNEventEntries,
@@ -30,18 +29,13 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> ext
     private formatter: (this: LixnetResponse) => Response;
 
     public constructor({
-        debugLog = false,
-        logger,
         formatter,
-        defaultHeaders = {},
-    }: {
-        debugLog?: boolean;
-        logger?: DebugLogger;
+        ...options
+    }: LixnetServerBaseOptions & {
         formatter?: (this: LixnetResponse) => Response;
-        defaultHeaders?: Record<string, string>
     }) {
-        super({ debugLog, logger, defaultHeaders });
-        this.formatter = formatter ?? getDefaultFormatter(defaultHeaders);
+        super(options);
+        this.formatter = formatter ?? getDefaultFormatter(this.defaultHeaders);
     }
 
     public on<K extends keyof Events & string>(
@@ -62,10 +56,7 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> ext
 
         const parsed = await this.parse(request);
         if (!parsed.ok) {
-            if (parsed.error === "Invalid JSON" && this.debugLog) {
-                this.logger({ error: true, message: "Invalid JSON" });
-            }
-            return this.fail(response, parsed.error, parsed.status);
+            return this.fail(response, parsed);
         }
 
         try {
@@ -82,7 +73,12 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> ext
 
             return response.format();
         } catch (error) {
-            return this.fail(response, "Handler error", 500);
+            return this.fail(response, {
+                error: "Handler error",
+                status: 500,
+                cause: error,
+                event: parsed.entry.event as string,
+            });
         }
     }
 }

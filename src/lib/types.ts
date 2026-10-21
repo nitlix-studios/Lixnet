@@ -5,9 +5,12 @@ import { LixnetResponse } from "./util/response";
 export type DebugLogger = ({
     error,
     message,
+    cause,
 }: {
     error?: boolean;
     message: string;
+    /** The underlying exception or validation error, when there is one. */
+    cause?: unknown;
 }) => void;
 
 export type FunctionInput<T> = T extends (input: infer TInput) => any

@@ -27,7 +27,7 @@ export default class LixnetClient<Events extends LXN_ServerClient_EventType> {
         const json = await response.json();
 
         if (json.error) {
-            throw new Error(json.error);
+            throw new Error(json.error, json.detail ? { cause: json.detail } : undefined);
         }
 
         return json.data;
