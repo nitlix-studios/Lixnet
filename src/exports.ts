@@ -35,3 +35,4 @@ export type {
 } from "./lib/types";
 export type { LXNStreamCallOptions } from "./lib/streamclient";
 export type { LixnetServerBaseOptions } from "./lib/serverbase";
+export type { LixnetCorsOptions } from "./lib/util/cors";

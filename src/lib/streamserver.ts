@@ -52,6 +52,9 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 
         const response = new LixnetResponse({ formatter: this.errorFormatter });
 
+        const corsResponse = this.handleCors(request, response);
+        if (corsResponse) return corsResponse;
+
         const parsed = await this.parse(request);
         if (!parsed.ok) {
             return this.fail(response, parsed);

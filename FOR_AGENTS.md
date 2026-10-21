@@ -231,7 +231,7 @@ From the package entrypoint:
     - `LixnetResponse`
 - **Types**
     - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes` (inferred contract)
-    - `LixnetServerBaseOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
+    - `LixnetServerBaseOptions`, `LixnetCorsOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
     - `LXN_ServerClient_EventType`
     - `LXNServerHandler`
     - `FunctionInput`
@@ -421,6 +421,36 @@ If you change these strings, you may break downstream consumers that match on th
 - `debugLog: true` logs every failed request through `logger` (default: `console.error`), including the event name and the underlying exception or validation error as `cause`.
 - `exposeErrors: true` adds that error's message to the response as `{ error, detail }`. `LixnetClient` then throws `Error(error, { cause: detail })`. Keep it off in production: exception messages can leak internals.
 - The `error` string itself never changes, so code matching on `"Handler error"` keeps working.
+
+### CORS
+
+When the RPC server is on another origin than the app (e.g. a Worker on `api.example.com`), pass `cors` instead of hand-writing CORS headers and an `OPTIONS` branch. Works on `LixnetServer` and `LixnetStreamServer`.
+
+```ts
+const server = new LixnetServer({
+    cors: {
+        origin: ["https://example.com", "http://localhost:3000"], // or "*", or (origin) => boolean
+        credentials: true, // cookies; not allowed with origin "*"
+        // maxAge: 7200,   // preflight cache in seconds (default 7200, Chrome's cap)
+        // allowHeaders: ["Content-Type", "Authorization"], // default: whatever the browser asks for
+        // exposeHeaders: ["X-Request-Id"],
+    },
+});
+
+export default {
+    async fetch(request: Request) {
+        const url = new URL(request.url);
+        if (url.pathname === "/rpc" && (request.method === "POST" || request.method === "OPTIONS")) {
+            return server.handle(request);
+        }
+        return new Response("Not found", { status: 404 });
+    },
+};
+```
+
+- `OPTIONS` preflights get `204` with `Access-Control-Max-Age` (default 7200), so the browser preflights at most once per 2 hours per origin instead of before every call.
+- Every response, errors included, gets `Access-Control-Allow-Origin` (the caller's origin, plus `Vary: Origin`) and `Access-Control-Allow-Credentials` when enabled.
+- Requests whose `Origin` isn't allowed get `403 { "error": "Origin not allowed" }` without running the handler. Requests without an `Origin` header (server-to-server, SSR) are not CORS and pass through.
 
 ### Default headers
 

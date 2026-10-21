@@ -2,6 +2,13 @@ import type { z } from "zod";
 import LixnetLog from "./util/log";
 import type { DebugLogger } from "./types";
 import type { LixnetResponse } from "./util/response";
+import {
+    type LixnetCorsOptions,
+    assertCorsOptions,
+    corsHeaders,
+    isOriginAllowed,
+    preflightHeaders,
+} from "./util/cors";
 
 export type LixnetServerBaseOptions = {
     /** Log failed requests (including the thrown error) through `logger`. */
@@ -13,6 +20,11 @@ export type LixnetServerBaseOptions = {
     exposeErrors?: boolean;
     logger?: DebugLogger;
     defaultHeaders?: Record<string, string>;
+    /**
+     * Handle CORS: answers `OPTIONS` preflights (cached for `maxAge`, default 7200s), adds CORS
+     * headers to every response, and rejects requests from origins that aren't allowed.
+     */
+    cors?: LixnetCorsOptions;
 };
 
 type EventEntry = { event: PropertyKey; schema?: z.ZodType<any> };
@@ -34,13 +46,17 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
     protected debugLog: boolean;
     protected exposeErrors: boolean;
     protected defaultHeaders: Record<string, string>;
+    protected cors?: LixnetCorsOptions;
 
     protected constructor({
         debugLog = false,
         exposeErrors = false,
         logger,
         defaultHeaders = {},
+        cors,
     }: LixnetServerBaseOptions) {
+        if (cors) assertCorsOptions(cors);
+        this.cors = cors;
         this.debugLog = debugLog;
         this.exposeErrors = exposeErrors;
         this.defaultHeaders = defaultHeaders;
@@ -96,6 +112,39 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
         }
 
         return { ok: true, entry, input: result.data };
+    }
+
+    /**
+     * With `cors` set: answers preflights and rejects disallowed origins (returns the Response),
+     * otherwise stages CORS headers on `response` (handlers can still override them) and returns null.
+     */
+    protected handleCors(request: Request, response: LixnetResponse): Response | null {
+        if (!this.cors) return null;
+
+        // No Origin header: same-origin GET or a server-to-server call (e.g. SSR), not CORS.
+        const origin = request.headers.get("Origin");
+        if (!origin) {
+            return request.method === "OPTIONS" ? new Response(null, { status: 204 }) : null;
+        }
+
+        if (!isOriginAllowed(this.cors, origin)) {
+            if (request.method === "OPTIONS") return new Response(null, { status: 403 });
+            return this.fail(response, { error: "Origin not allowed", status: 403, cause: origin });
+        }
+
+        if (request.method === "OPTIONS") {
+            return new Response(null, {
+                status: 204,
+                headers: preflightHeaders(
+                    this.cors,
+                    origin,
+                    request.headers.get("Access-Control-Request-Headers")
+                ),
+            });
+        }
+
+        response.headers(corsHeaders(this.cors, origin));
+        return null;
     }
 
     /** Logs the failure (with `debugLog`) and stages it on the response with its status. */

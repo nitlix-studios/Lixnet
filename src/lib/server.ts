@@ -91,6 +91,9 @@ export default class LixnetServer<
 
         const response = new LixnetResponse({ formatter: this.formatter });
 
+        const corsResponse = this.handleCors(request, response);
+        if (corsResponse) return corsResponse;
+
         const parsed = await this.parse(request);
         if (!parsed.ok) {
             return this.fail(response, parsed);
