@@ -1,5 +1,4 @@
-import { z } from "zod";
-import LixnetLog from "./util/log";
+import LixnetServerBase from "./serverbase";
 import type {
     DebugLogger,
     FunctionInput,
@@ -10,7 +9,8 @@ import type {
     LXNStreamEmitter,
 } from "./types";
 import { LixnetResponse } from "./util/response";
-import { LixnetRequest, wrapLixnetRequest } from "./util/request";
+import { LixnetRequest, createLixnetRequest } from "./util/request";
+import getDefaultFormatter from "./util/getDefaultFormatter";
 
 type LXNStreamServerEventInput<
     Events extends LXN_ServerClient_EventType,
@@ -27,11 +27,10 @@ type LXNStreamServerEventInput<
     schema?: LXNEventSchema<Events, K>;
 };
 
-export default class LixnetStreamServer<Events extends LXN_ServerClient_EventType> {
-    private events: Record<string, LXNStreamServerEventInput<Events, keyof Events>> = {};
-    private logger: DebugLogger = LixnetLog;
-    private debugLog: boolean = false;
-    private defaultHeaders: Record<string, string>;
+export default class LixnetStreamServer<Events extends LXN_ServerClient_EventType> extends LixnetServerBase<
+    LXNStreamServerEventInput<Events, keyof Events>
+> {
+    private errorFormatter: (this: LixnetResponse) => Response;
 
     public constructor({
         debugLog = false,
@@ -42,9 +41,8 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
         logger?: DebugLogger;
         defaultHeaders?: Record<string, string>;
     }) {
-        this.debugLog = debugLog;
-        this.defaultHeaders = defaultHeaders;
-        logger ? (this.logger = logger) : "";
+        super({ debugLog, logger, defaultHeaders });
+        this.errorFormatter = getDefaultFormatter(defaultHeaders);
     }
 
     public on<K extends keyof Events & string>(
@@ -55,66 +53,25 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
                   { [P in keyof Events & string]: LXNStreamServerEventInput<Events, P> }
               >
     ) {
-        const entries = (Array.isArray(input) ? input : [input]) as LXNStreamServerEventInput<
-            Events,
-            keyof Events
-        >[];
-        for (const entry of entries) {
-            this.events[entry.event as string] = entry;
-        }
+        this.register(input as LXNStreamServerEventInput<Events, keyof Events>);
     }
 
     public async handle(request: Request): Promise<Response> {
         const requestClone = request.clone();
 
-        let jsonData: any;
-        try {
-            jsonData = await request.json();
-        } catch {
-            if (this.debugLog) this.logger({ error: true, message: "Invalid JSON" });
-            return Response.json({ error: "Invalid JSON" }, { status: 400 });
-        }
+        const response = new LixnetResponse({ formatter: this.errorFormatter });
 
-        if (jsonData === null || typeof jsonData !== "object" || Array.isArray(jsonData)) {
-            return Response.json({ error: "Invalid request body" }, { status: 400 });
-        }
-
-        if (!jsonData.event) {
-            return Response.json({ error: "Event not found" }, { status: 400 });
-        }
-
-        if (!("input" in jsonData)) {
-            return Response.json({ error: "Input not found" }, { status: 400 });
-        }
-
-        const event = this.events[jsonData.event];
-        if (!event) {
-            return Response.json({ error: "Event not found" }, { status: 404 });
-        }
-
-        let validatedInput: any;
-        try {
-            validatedInput = event.schema
-                ? event.schema.parse(jsonData.input)
-                : jsonData.input;
-        } catch (error) {
-            if (error instanceof z.ZodError) {
-                return Response.json({ error: "Invalid input" }, { status: 400 });
+        const parsed = await this.parse(request);
+        if (!parsed.ok) {
+            if (parsed.error === "Invalid JSON" && this.debugLog) {
+                this.logger({ error: true, message: "Invalid JSON" });
             }
-            return Response.json({ error: "Handler error" }, { status: 500 });
+            return this.fail(response, parsed.error, parsed.status);
         }
 
-        const response = new LixnetResponse({ formatter: function() { return new Response(); } });
-
-        const newRequest: LixnetRequest = wrapLixnetRequest(requestClone, {
-            header: response.header.bind(response),
-            deleteHeader: response.deleteHeader.bind(response),
-            cookie: response.cookie.bind(response),
-            deleteCookie: response.deleteCookie.bind(response),
-            responseHeaders: response.responseHeaders,
-            responseHeaderDeletes: response.responseHeaderDeletes,
-            responseCookies: response.responseCookies,
-        });
+        const event = parsed.entry;
+        const validatedInput = parsed.input;
+        const newRequest: LixnetRequest = createLixnetRequest(requestClone, response);
 
         const encoder = new TextEncoder();
         let streamController!: ReadableStreamDefaultController<Uint8Array>;

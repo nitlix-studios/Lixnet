@@ -1,5 +1,4 @@
-import { z } from "zod";
-import LixnetLog from "./util/log";
+import LixnetServerBase from "./serverbase";
 import type {
     DebugLogger,
     FunctionInput,
@@ -10,7 +9,7 @@ import type {
     LXN_ServerClient_EventType,
 } from "./types";
 import { LixnetResponse } from "./util/response";
-import { LixnetRequest, wrapLixnetRequest } from "./util/request";
+import { LixnetRequest, createLixnetRequest } from "./util/request";
 import getDefaultFormatter from "./util/getDefaultFormatter";
 
 type LXNServerEventInput<
@@ -25,10 +24,9 @@ type LXNServerEventInput<
     schema?: LXNEventSchema<Events, TName>;
 };
 
-export default class LixnetServer<Events extends LXN_ServerClient_EventType> {
-    private events: Record<string, LXNServerEventInput<Events, keyof Events>> = {};
-    private logger: DebugLogger = LixnetLog;
-    private debugLog: boolean = false;
+export default class LixnetServer<Events extends LXN_ServerClient_EventType> extends LixnetServerBase<
+    LXNServerEventInput<Events, keyof Events>
+> {
     private formatter: (this: LixnetResponse) => Response;
 
     public constructor({
@@ -42,8 +40,7 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> {
         formatter?: (this: LixnetResponse) => Response;
         defaultHeaders?: Record<string, string>
     }) {
-        this.debugLog = debugLog;
-        logger ? (this.logger = logger) : "";
+        super({ debugLog, logger, defaultHeaders });
         this.formatter = formatter ?? getDefaultFormatter(defaultHeaders);
     }
 
@@ -55,13 +52,7 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> {
                   { [P in keyof Events & string]: LXNServerEventInput<Events, P> }
               >
     ) {
-        const entries = (Array.isArray(input) ? input : [input]) as LXNServerEventInput<
-            Events,
-            keyof Events
-        >[];
-        for (const entry of entries) {
-            this.events[entry.event as string] = entry;
-        }
+        this.register(input as LXNServerEventInput<Events, keyof Events>);
     }
 
     public async handle(request: Request) {
@@ -69,87 +60,29 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> {
 
         const response = new LixnetResponse({ formatter: this.formatter });
 
-        let jsonData;
-        try {
-            jsonData = (await request.json()) as any;
-        } catch (error) {
-            this.debugLog
-                ? this.logger({
-                    error: true,
-                    message: "Invalid JSON",
-                })
-                : "";
-
-            response.error("Invalid JSON");
-            return response.format();
-        }
-
-        if (
-            jsonData === null ||
-            typeof jsonData !== "object" ||
-            Array.isArray(jsonData)
-        ) {
-            response.error("Invalid request body");
-            return response.format();
-        }
-
-        if (!jsonData.event) {
-            response.error("Event not found");
-            return response.format();
-        }
-
-        if (!("input" in jsonData)) {
-            response.error("Input not found");
-            return response.format();
-        }
-
-        const event = this.events[jsonData.event];
-        if (!event) {
-            response.error("Event not found");
-            return response.format();
+        const parsed = await this.parse(request);
+        if (!parsed.ok) {
+            if (parsed.error === "Invalid JSON" && this.debugLog) {
+                this.logger({ error: true, message: "Invalid JSON" });
+            }
+            return this.fail(response, parsed.error, parsed.status);
         }
 
         try {
-            const validatedInput = event.schema
-                ? event.schema.parse(jsonData.input)
-                : jsonData.input;
+            const data = await parsed.entry.handler({
+                ...parsed.input,
+                request: createLixnetRequest(requestClone, response),
+                response: response,
+            });
 
-            try {
-                const newRequest: LixnetRequest =
-                    wrapLixnetRequest(requestClone, {
-                        header: response.header.bind(response),
-                        deleteHeader: response.deleteHeader.bind(response),
-                        cookie: response.cookie.bind(response),
-                        deleteCookie: response.deleteCookie.bind(response),
-                        responseHeaders: response.responseHeaders,
-                        responseHeaderDeletes: response.responseHeaderDeletes,
-                        responseCookies: response.responseCookies,
-                    });
-
-
-                const data = await event.handler({
-                    ...validatedInput,
-                    request: newRequest,
-                    response: response,
-                });
-
-                //check data isnt void/null/undefined
-                if (!(data === undefined || data === null)) {
-                    response.data(data);
-                }
-
-                return response.format();
-            } catch (error) {
-                response.error("Handler error");
-                return response.format();
+            //check data isnt void/null/undefined
+            if (!(data === undefined || data === null)) {
+                response.data(data);
             }
-        } catch (error) {
-            if (error instanceof z.ZodError) {
-                response.error("Invalid input");
-                return response.format();
-            }
-            response.error("Handler error");
+
             return response.format();
+        } catch (error) {
+            return this.fail(response, "Handler error", 500);
         }
     }
 }

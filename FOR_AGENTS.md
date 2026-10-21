@@ -338,14 +338,28 @@ Cookie values are written with `encodeURIComponent` (and decoded again by `reque
 
 ### Error behavior (important for compatibility)
 
-`LixnetServer.handle(...)` currently uses a small set of string errors:
+`LixnetServer.handle(...)` and `LixnetStreamServer.handle(...)` share the same parsing and return the same string errors with the same status codes:
 
-- `"Invalid JSON"`
-- `"Invalid request body"`
-- `"Event not found"`
-- `"Input not found"`
-- `"Invalid input"` (Zod schema failure)
-- `"Handler error"` (thrown handler or unexpected errors)
+| Error | Status |
+| --- | --- |
+| `"Invalid JSON"` | 400 |
+| `"Invalid request body"` | 400 |
+| `"Event not found"` (missing `event`) | 400 |
+| `"Input not found"` | 400 |
+| `"Event not found"` (unknown `event`) | 404 |
+| `"Invalid input"` (schema failure) | 400 |
+| `"Handler error"` (handler threw) | 500 |
+
+Error responses always go through the formatter, so `defaultHeaders` (e.g. CORS) are included.
+
+Handlers can return their own errors with a custom status:
+
+```ts
+handler: async ({ response }) => {
+    response.code(403);
+    response.error("Forbidden");
+},
+```
 
 If you change these strings, you may break downstream consumers that match on them. Prefer adding structured error codes later (new field) rather than changing the existing `error` string.
 

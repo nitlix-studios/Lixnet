@@ -1,3 +1,5 @@
+import type { LixnetResponse } from "./response";
+
 export type RequestCookie = {
     name: string;
     value: string;
@@ -326,6 +328,19 @@ export function wrapLixnetRequest(
             return Reflect.get(target, prop, target);
         },
     }) as unknown as LixnetRequest;
+}
+
+/** Wraps `request` so its cookie/header writes are staged on `response`. */
+export function createLixnetRequest(request: Request, response: LixnetResponse): LixnetRequest {
+    return wrapLixnetRequest(request, {
+        header: response.header.bind(response),
+        deleteHeader: response.deleteHeader.bind(response),
+        cookie: response.cookie.bind(response),
+        deleteCookie: response.deleteCookie.bind(response),
+        responseHeaders: response.responseHeaders,
+        responseHeaderDeletes: response.responseHeaderDeletes,
+        responseCookies: response.responseCookies,
+    });
 }
 
 /** @deprecated Use {@link LixnetCookies}. */
