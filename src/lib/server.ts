@@ -11,7 +11,12 @@ import { LixnetResponse } from "./util/response";
 import { type LixnetRequest, createLixnetRequest } from "./util/request";
 import getDefaultFormatter from "./util/getDefaultFormatter";
 import type { StandardSchemaV1 } from "./standardschema";
-import type { LixnetRoute, LixnetRoutes } from "./router";
+import type {
+    LixnetRoute,
+    LixnetRouteDefinitions,
+    LixnetRoutes,
+    LixnetRoutesFromDefinitions,
+} from "./router";
 import type { LixnetServerInjections } from "./types";
 
 type LXNServerEventInput<
@@ -26,25 +31,42 @@ type LXNServerEventInput<
     schema?: LXNEventSchema<Events, TName>;
 };
 
+/**
+ * Routes with inferred types, as `{ name: { schema?, handler } }`: the same as calling
+ * `.route(name, ...)` for each. `events` is an alias of `routes`; pass one or the other.
+ */
+type LixnetServerRoutesOption<TRouteDefinitions> =
+    | { routes?: TRouteDefinitions; events?: never }
+    | { events?: TRouteDefinitions; routes?: never };
+
 export default class LixnetServer<
     Events extends LXN_ServerClient_EventType = LXN_ServerClient_EventType,
-    Routes extends LixnetRoutes = {}
+    Routes extends LixnetRoutes = {},
+    // Inferred from the `routes` option: its schemas (to type each handler) and its definitions.
+    TSchemas extends Record<string, unknown> = {},
+    TDefs extends Record<string, { handler: (input: any) => unknown }> = {}
 > extends LixnetServerBase<
     LXNServerEventInput<Events, keyof Events>
 > {
-    /** Type-only: the routes added with `.route(...)`, read by `InferLixnetEvents`. */
-    declare readonly "~routes": Routes;
+    /** Type-only: routes from the `routes` option and `.route(...)`, read by `InferLixnetEvents`. */
+    declare readonly "~routes": Routes & LixnetRoutesFromDefinitions<TDefs>;
 
     private formatter: (this: LixnetResponse) => Response;
 
     public constructor({
         formatter,
+        routes,
+        events,
         ...options
     }: LixnetServerBaseOptions & {
         formatter?: (this: LixnetResponse) => Response;
-    } = {}) {
+    } & LixnetServerRoutesOption<TDefs & LixnetRouteDefinitions<TSchemas>> = {}) {
         super(options);
         this.formatter = formatter ?? getDefaultFormatter(this.defaultHeaders);
+
+        for (const [event, route] of Object.entries(routes ?? events ?? {})) {
+            this.register({ ...(route as object), event } as LXNServerEventInput<Events, keyof Events>);
+        }
     }
 
     /**
@@ -61,7 +83,9 @@ export default class LixnetServer<
         }
     ): LixnetServer<
         Events,
-        Routes & Record<K, LixnetRoute<StandardSchemaV1.InferInput<TSchema>, Awaited<TOutput>>>
+        Routes & Record<K, LixnetRoute<StandardSchemaV1.InferInput<TSchema>, Awaited<TOutput>>>,
+        TSchemas,
+        TDefs
     >;
 
     /** Without a schema, the input is the handler's parameter type minus `request`/`response`. */
@@ -70,7 +94,9 @@ export default class LixnetServer<
         route: { schema?: undefined; handler: (input: TParams) => TOutput }
     ): LixnetServer<
         Events,
-        Routes & Record<K, LixnetRoute<Omit<TParams, keyof LixnetServerInjections>, Awaited<TOutput>>>
+        Routes & Record<K, LixnetRoute<Omit<TParams, keyof LixnetServerInjections>, Awaited<TOutput>>>,
+        TSchemas,
+        TDefs
     >;
 
     public route(event: string, route: { schema?: StandardSchemaV1; handler: (input: any) => unknown }) {

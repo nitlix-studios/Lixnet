@@ -19,7 +19,13 @@ export {
     LIXNET_ERROR_STATUS,
 };
 export type { LixnetErrorCode, LixnetIssue } from "./lib/error";
-export type { LixnetRoute, LixnetRoutes, InferLixnetEvents } from "./lib/router";
+export type {
+    LixnetRoute,
+    LixnetRoutes,
+    LixnetRouteDefinitions,
+    LixnetRoutesFromDefinitions,
+    InferLixnetEvents,
+} from "./lib/router";
 export type {
     LixnetCookies,
     LixnetHeaders,

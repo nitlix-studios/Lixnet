@@ -162,9 +162,9 @@ await client.call(
 );
 ```
 
-## Inferred contract (`server.route`)
+## Inferred contract (`routes` / `server.route`)
 
-Instead of writing an `Events` type by hand, chain `.route(...)` on the server and let the client infer everything from `typeof server`. Experimental: `Events` + `on()` keeps working and both can be used side by side.
+Instead of writing an `Events` type by hand, pass your events as `routes` (or chain `.route(...)`) and let the client infer everything from `typeof server`. Experimental: `Events` + `on()` keeps working and both can be used side by side.
 
 ```ts
 // cloudflare/ioServer.ts (worker only)
@@ -173,16 +173,29 @@ import { LixnetServer } from "lixnet";
 import live from "./(functions)/live";
 
 export default function createRpcServer(options: { defaultHeaders?: Record<string, string> } = {}) {
-    return new LixnetServer(options)
-        .route("helloThere", {
-            schema: z.object({ name: z.string() }),
-            handler: ({ name }) => ({ message: `Hello ${name}` }),
-        })
-        // no schema: input is the handler's parameter type minus request/response
-        .route("live", { handler: live });
+    return new LixnetServer({
+        ...options,
+        routes: {
+            helloThere: {
+                schema: z.object({ name: z.string() }),
+                handler: ({ name }) => ({ message: `Hello ${name}` }), // name: string, from the schema
+            },
+            // no schema: input is the handler's parameter type minus request/response
+            live: { handler: live },
+        },
+    });
 }
 
 export type RpcServer = ReturnType<typeof createRpcServer>;
+```
+
+`events` is an alias of `routes` (same types and behaviour) for codebases that still use the events naming; pass one or the other.
+
+`.route(name, { schema?, handler })` does the same one route at a time and can be chained after `routes`, e.g. to add events conditionally:
+
+```ts
+new LixnetServer({ routes: { helloThere: { ... } } })
+    .route("live", { handler: live });
 ```
 
 ```ts
@@ -207,7 +220,7 @@ Keeping server code out of the client:
 
 ## Agent playbook (how to “act”)
 
-- **Add a new HTTP RPC** (inferred contract): add a `.route("name", { schema?, handler })` to the server chain; the client picks it up through `typeof server`.
+- **Add a new HTTP RPC** (inferred contract): add `name: { schema?, handler }` to the server's `routes` (or a `.route("name", { ... })` to the chain); the client picks it up through `typeof server`.
 - **Add a new HTTP RPC** (`Events` contract):
     - Add a new key to your `Events` type.
     - Register it via `server.on({ event: "...", schema?, handler })`.
