@@ -5,9 +5,9 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/nitlix-hq/Lixnet"
+        "url": "git+https://github.com/nitlix-studios/Lixnet.git"
     },
-    "homepage": "https://github.com/nitlix-hq/Lixnet",
+    "homepage": "https://github.com/nitlix-studios/Lixnet",
     "description": "RPC over HTTP and WebSockets, simplified.",
     "module": "./dist/exports.js",
     "main": "./dist/exports.js",
