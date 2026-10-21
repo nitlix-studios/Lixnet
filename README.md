@@ -204,6 +204,8 @@ export type RpcServer = ReturnType<typeof createRpcServer>;
 
 `events` is an alias of `routes` (same types and behaviour) for codebases that still use the events naming; pass one or the other.
 
+`LixnetStreamServer` takes the same `routes` option and `.route(...)`; see "HTTP streaming" in [FOR_AGENTS.md](FOR_AGENTS.md). `LixnetPeerEvents` does the same for WebSockets (see below).
+
 `.route(name, { schema?, handler })` does the same one route at a time and can be chained after `routes`, e.g. to add events conditionally:
 
 ```ts
@@ -500,6 +502,7 @@ From `src/exports.ts`:
 - **`LixnetServer`**
 - **`LixnetClient`**
 - **`LixnetPeer`**
+- **`LixnetStreamServer`**, **`LixnetStreamClient`**
 - **`LixnetResponse`**
 
 Types:

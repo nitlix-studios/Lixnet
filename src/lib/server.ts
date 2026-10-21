@@ -16,6 +16,7 @@ import type {
     LixnetRoute,
     LixnetRoutes,
     LixnetRoutesFromDefinitions,
+    LixnetRoutesOption,
 } from "./router";
 import type { LixnetServerInjections } from "./types";
 
@@ -30,14 +31,6 @@ type LXNServerEventInput<
     >;
     schema?: LXNEventSchema<Events, TName>;
 };
-
-/**
- * Routes with inferred types, as `{ name: { schema?, handler } }`: the same as calling
- * `.route(name, ...)` for each. `events` is an alias of `routes`; pass one or the other.
- */
-type LixnetServerRoutesOption<TRouteDefinitions> =
-    | { routes?: TRouteDefinitions; events?: never }
-    | { events?: TRouteDefinitions; routes?: never };
 
 export default class LixnetServer<
     Events extends LXN_ServerClient_EventType = LXN_ServerClient_EventType,
@@ -60,7 +53,7 @@ export default class LixnetServer<
         ...options
     }: LixnetServerBaseOptions & {
         formatter?: (this: LixnetResponse) => Response;
-    } & LixnetServerRoutesOption<TDefs & LixnetRouteDefinitions<TSchemas>> = {}) {
+    } & LixnetRoutesOption<TDefs & LixnetRouteDefinitions<TSchemas>> = {}) {
         super(options);
         this.formatter = formatter ?? getDefaultFormatter(this.defaultHeaders);
 

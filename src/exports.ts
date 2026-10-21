@@ -24,6 +24,8 @@ export type {
     LixnetRoutes,
     LixnetRouteDefinitions,
     LixnetRoutesFromDefinitions,
+    LixnetRouteDefinitionInput,
+    LixnetRoutesOption,
     InferLixnetEvents,
 } from "./lib/router";
 export type {
@@ -44,6 +46,7 @@ export type {
     LXNCallArgs,
     LixnetFetch,
     LixnetClientOptions,
+    LixnetStreamInjections,
 } from "./lib/types";
 export type { LXNStreamCallOptions } from "./lib/streamclient";
 export type { LixnetServerBaseOptions } from "./lib/serverbase";

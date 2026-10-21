@@ -245,7 +245,7 @@ From the package entrypoint:
 - **Types**
     - `LixnetError` (class), `LIXNET_ERROR_STATUS`, `LixnetErrorCode`, `LixnetIssue`
     - `StandardSchemaV1`
-    - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes` (inferred contract)
+    - `InferLixnetEvents`, `LixnetRoute`, `LixnetRoutes`, `LixnetRoutesOption` (inferred contract)
     - `LixnetFetch`, `LixnetClientOptions` (client `fetch` option)
     - `LixnetServerBaseOptions`, `LixnetCorsOptions`, `LXNCallArgs`, `LXNStreamEmitter`, `LXNStreamCallOptions`
     - `LXN_ServerClient_EventType`
@@ -595,6 +595,20 @@ await streamClient.call("generate", { prompt: "hi" }, { onStreamChunk: (t) => pr
 - A handler that throws after emitting ends the stream with an `{ "error": "Handler error" }` frame (plus `detail` with `exposeErrors`).
 - `stream.signal` aborts when the client disconnects; `emit` is a no-op from then on.
 - `LixnetStreamClient.call(...)` resolves when the stream ends and throws on non-2xx responses or error frames.
+
+Inferred stream routes work like `LixnetServer`'s (`routes` option or `.route(...)`, client typed with `typeof streamServer`). The client's chunk type comes from:
+
+- a generator handler: whatever it yields (`async function* ({ prompt }) { yield token }`). Each yielded value is emitted; iteration stops if the client disconnects. Sync generators work too; other returned values (e.g. arrays) are not streamed.
+- `stream.emit(...)`: the annotated `stream: LXNStreamEmitter<T>` parameter, else `unknown`.
+
+```ts
+const streamServer = new LixnetStreamServer().route("generate", {
+    schema: z.object({ prompt: z.string() }),
+    handler: async function* ({ prompt, stream }) {
+        for await (const token of llm(prompt, { signal: stream.signal })) yield token;
+    },
+});
+```
 
 Frames:
 

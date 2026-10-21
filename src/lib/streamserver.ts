@@ -6,10 +6,19 @@ import type {
     LXNEventEntries,
     LXNEventSchema,
     LXNStreamEmitter,
+    LixnetStreamInjections,
 } from "./types";
 import { LixnetResponse } from "./util/response";
 import { type LixnetRequest, createLixnetRequest } from "./util/request";
 import getDefaultFormatter, { buildResponseHeaders, errorBody } from "./util/getDefaultFormatter";
+import type { StandardSchemaV1 } from "./standardschema";
+import type {
+    LixnetRouteDefinitionInput,
+    LixnetRouteDefinitions,
+    LixnetRoute,
+    LixnetRoutes,
+    LixnetRoutesOption,
+} from "./router";
 
 type LXNStreamServerEventInput<
     Events extends LXN_ServerClient_EventType,
@@ -22,18 +31,96 @@ type LXNStreamServerEventInput<
             response: LixnetResponse;
             stream: LXNStreamEmitter<FunctionOutput<Events[K]>>;
         }
-    ) => Promise<void> | void;
+    ) => unknown;
     schema?: LXNEventSchema<Events, K>;
 };
 
-export default class LixnetStreamServer<Events extends LXN_ServerClient_EventType> extends LixnetServerBase<
+/**
+ * A stream route's chunk type: what the handler yields when it's a generator, else the chunk type
+ * of a `stream` it annotates (`stream: LXNStreamEmitter<T>`), else `unknown`.
+ */
+type StreamChunk<TResult, TParams> =
+    TResult extends AsyncIterable<infer TChunk> | Generator<infer TChunk>
+        ? TChunk
+        : TParams extends { stream: LXNStreamEmitter<infer TChunk> }
+          ? TChunk
+          : unknown;
+
+type StreamRoutesFromDefinitions<TDefs> = {
+    [K in keyof TDefs]: TDefs[K] extends { handler: (input: infer TParams) => infer TResult }
+        ? LixnetRoute<LixnetRouteDefinitionInput<TDefs[K], LixnetStreamInjections>, StreamChunk<TResult, TParams>>
+        : never;
+};
+
+function isIterable(value: unknown): value is AsyncIterable<unknown> | Iterable<unknown> {
+    if (value === null || typeof value !== "object") return false;
+    // Sync iterables only when they're generators, so a returned array isn't streamed by accident.
+    return (
+        typeof (value as any)[Symbol.asyncIterator] === "function" ||
+        (typeof (value as any)[Symbol.iterator] === "function" && typeof (value as any).next === "function")
+    );
+}
+
+export default class LixnetStreamServer<
+    Events extends LXN_ServerClient_EventType = LXN_ServerClient_EventType,
+    Routes extends LixnetRoutes = {},
+    // Inferred from the `routes` option: its schemas (to type each handler) and its definitions.
+    TSchemas extends Record<string, unknown> = {},
+    TDefs extends Record<string, { handler: (input: any) => unknown }> = {}
+> extends LixnetServerBase<
     LXNStreamServerEventInput<Events, keyof Events>
 > {
+    /** Type-only: routes from the `routes` option and `.route(...)`, read by `InferLixnetEvents`. */
+    declare readonly "~routes": Routes & StreamRoutesFromDefinitions<TDefs>;
+
     private errorFormatter: (this: LixnetResponse) => Response;
 
-    public constructor(options: LixnetServerBaseOptions = {}) {
+    public constructor({
+        routes,
+        events,
+        ...options
+    }: LixnetServerBaseOptions &
+        LixnetRoutesOption<TDefs & LixnetRouteDefinitions<TSchemas, LixnetStreamInjections>> = {}) {
         super(options);
         this.errorFormatter = getDefaultFormatter(this.defaultHeaders);
+
+        for (const [event, route] of Object.entries(routes ?? events ?? {})) {
+            this.register({ ...(route as object), event } as LXNStreamServerEventInput<Events, keyof Events>);
+        }
+    }
+
+    /**
+     * Adds a stream event whose types are inferred. The client's chunk type is what the handler
+     * yields (`async function* () { yield chunk }`), or, with `stream.emit(...)`, the type of an
+     * annotated `stream: LXNStreamEmitter<T>` parameter.
+     */
+    public route<K extends string, TSchema extends StandardSchemaV1, TResult>(
+        event: K,
+        route: {
+            schema: TSchema;
+            handler: (input: StandardSchemaV1.InferOutput<TSchema> & LixnetStreamInjections) => TResult;
+        }
+    ): LixnetStreamServer<
+        Events,
+        Routes & Record<K, LixnetRoute<StandardSchemaV1.InferInput<TSchema>, StreamChunk<TResult, unknown>>>,
+        TSchemas,
+        TDefs
+    >;
+
+    /** Without a schema, the input is the handler's parameter type minus `request`/`response`/`stream`. */
+    public route<K extends string, TParams, TResult>(
+        event: K,
+        route: { schema?: undefined; handler: (input: TParams) => TResult }
+    ): LixnetStreamServer<
+        Events,
+        Routes & Record<K, LixnetRoute<Omit<TParams, keyof LixnetStreamInjections>, StreamChunk<TResult, TParams>>>,
+        TSchemas,
+        TDefs
+    >;
+
+    public route(event: string, route: { schema?: StandardSchemaV1; handler: (input: any) => unknown }) {
+        this.register({ ...route, event } as LXNStreamServerEventInput<Events, keyof Events>);
+        return this;
     }
 
     public on<K extends keyof Events & string>(
@@ -114,7 +201,14 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 
             (async () => {
                 try {
-                    await event.handler({ ...validatedInput, request: newRequest, response, stream });
+                    const result = await event.handler({ ...validatedInput, request: newRequest, response, stream });
+                    // Generator handlers: each yielded value is a chunk. Stops early if the client disconnects.
+                    if (isIterable(result)) {
+                        for await (const chunk of result) {
+                            if (closed) break;
+                            stream.emit(chunk);
+                        }
+                    }
                     start();
                 } catch (error) {
                     const failure = this.failureFromThrown(error, event.event as string);

@@ -71,3 +71,7 @@ export type LXNStreamEmitter<TChunk> = {
     /** Aborted when the client disconnects; `emit` becomes a no-op from then on. */
     signal: AbortSignal;
 };
+
+export type LixnetStreamInjections = LixnetServerInjections & {
+    stream: LXNStreamEmitter<unknown>;
+};
