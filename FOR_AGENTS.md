@@ -162,7 +162,7 @@ await client.call(
     - Add a new key to your `Events` type.
     - Register it via `server.on({ event: "...", schema?, handler })`.
     - Call it with `client.call("...", input)`.
-- **Validate inputs**: always provide `schema` for anything exposed publicly.
+- **Validate inputs**: always provide `schema` for anything exposed publicly. The schema's output type is checked against the event's input type, so a schema that drifts from `Events` is a compile error.
 - **Set headers/cookies/status**: use `response.header(...)`, `response.cookie(...)`, `response.code(...)`.
 - **Read request headers/cookies**: use `request.headers().get(...)` and `request.cookies().get(...)`.
 - **Avoid breaking changes**:

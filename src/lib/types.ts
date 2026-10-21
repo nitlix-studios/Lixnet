@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import { LixnetRequest } from "./util/request";
 import { LixnetResponse } from "./util/response";
 
@@ -22,6 +23,17 @@ export type LXNServerHandler<Input, Output> = (
 ) => Promise<Output> | Output;
 
 export type LXN_ServerClient_EventType = object;
+
+/** A schema whose parsed output must match the event's declared input type. */
+export type LXNEventSchema<Events, K extends keyof Events> = z.ZodType<
+    FunctionInput<Events[K]>
+>;
+
+/** One registration per event name, so arrays passed to `on()` are typed per element. */
+export type LXNEventEntries<
+    Events,
+    TEntry extends { [K in keyof Events & string]: unknown }
+> = TEntry[keyof Events & string][];
 
 /** The inbound request passed to handlers (Next.js–style `cookies()` / `headers()`). */
 export type { LixnetRequest as LXN_ServerClient_Request } from "./util/request";

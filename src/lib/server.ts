@@ -4,6 +4,8 @@ import type {
     DebugLogger,
     FunctionInput,
     FunctionOutput,
+    LXNEventEntries,
+    LXNEventSchema,
     LXNServerHandler,
     LXN_ServerClient_EventType,
 } from "./types";
@@ -20,7 +22,7 @@ type LXNServerEventInput<
         FunctionInput<Events[TName]> & { request: LixnetRequest, response: LixnetResponse },
         FunctionOutput<Events[TName]>
     >;
-    schema?: z.ZodSchema<any>;
+    schema?: LXNEventSchema<Events, TName>;
 };
 
 export default class LixnetServer<Events extends LXN_ServerClient_EventType> {
@@ -46,14 +48,19 @@ export default class LixnetServer<Events extends LXN_ServerClient_EventType> {
     }
 
     public on<K extends keyof Events & string>(
-        input: LXNServerEventInput<Events, K> | LXNServerEventInput<Events, K>[]
+        input:
+            | LXNServerEventInput<Events, K>
+            | LXNEventEntries<
+                  Events,
+                  { [P in keyof Events & string]: LXNServerEventInput<Events, P> }
+              >
     ) {
-        if (Array.isArray(input)) {
-            input.forEach((event) => {
-                this.events[event.event] = event;
-            });
-        } else {
-            this.events[input.event] = input;
+        const entries = (Array.isArray(input) ? input : [input]) as LXNServerEventInput<
+            Events,
+            keyof Events
+        >[];
+        for (const entry of entries) {
+            this.events[entry.event as string] = entry;
         }
     }
 

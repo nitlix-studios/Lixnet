@@ -5,6 +5,8 @@ import type {
     FunctionInput,
     FunctionOutput,
     LXN_ServerClient_EventType,
+    LXNEventEntries,
+    LXNEventSchema,
     LXNStreamEmitter,
 } from "./types";
 import { LixnetResponse } from "./util/response";
@@ -22,7 +24,7 @@ type LXNStreamServerEventInput<
             stream: LXNStreamEmitter<FunctionOutput<Events[K]>>;
         }
     ) => Promise<void> | void;
-    schema?: z.ZodSchema<any>;
+    schema?: LXNEventSchema<Events, K>;
 };
 
 export default class LixnetStreamServer<Events extends LXN_ServerClient_EventType> {
@@ -46,14 +48,19 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
     }
 
     public on<K extends keyof Events & string>(
-        input: LXNStreamServerEventInput<Events, K> | LXNStreamServerEventInput<Events, K>[]
+        input:
+            | LXNStreamServerEventInput<Events, K>
+            | LXNEventEntries<
+                  Events,
+                  { [P in keyof Events & string]: LXNStreamServerEventInput<Events, P> }
+              >
     ) {
-        if (Array.isArray(input)) {
-            input.forEach((ev) => {
-                this.events[ev.event] = ev;
-            });
-        } else {
-            this.events[input.event] = input;
+        const entries = (Array.isArray(input) ? input : [input]) as LXNStreamServerEventInput<
+            Events,
+            keyof Events
+        >[];
+        for (const entry of entries) {
+            this.events[entry.event as string] = entry;
         }
     }
 
