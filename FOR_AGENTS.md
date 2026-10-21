@@ -346,7 +346,7 @@ server.on({
 
 `LixnetServer.handle(request: Request)`:
 
-1. Clones the incoming `Request` (`request.clone()`) because parsing consumes the body.
+1. Reads the body once as text (no `request.clone()`: cloning tees the body stream and halved throughput). The text is kept so handlers can still re-read the body.
 2. Creates a `LixnetResponse` instance, which accumulates:
     - `data` or `error`
     - status code
@@ -357,7 +357,7 @@ server.on({
     - `input` (required; can be any JSON)
 4. Looks up the registered event handler by `event` name.
 5. If a schema was provided at registration time, validates `input` through its Standard Schema interface (`schema["~standard"].validate(...)`, awaited, so async refinements work). Zod 4, valibot, arktype and Effect Schema all qualify.
-6. Wraps the cloned `Request` into a `LixnetRequest` proxy via `wrapLixnetRequest(...)`:
+6. Wraps the `Request` into a `LixnetRequest` proxy via `wrapLixnetRequest(...)`, which serves `json()`, `text()`, `arrayBuffer()`, `bytes()`, `blob()`, `formData()`, `body`, `bodyUsed` and `clone()` from the already-read body:
     - `request.cookies()` gives a Next.js-like cookie API backed by the request snapshot plus staged response mutations.
     - `request.headers()` gives a Next.js-like headers API backed by the request snapshot plus staged response mutations.
 7. Calls the handler with:
@@ -565,7 +565,7 @@ try {
 
 Both wrappers are “read from request snapshot, write into response staging”:
 
-- Reading comes from a snapshot copy (so handler mutations do not alter the inbound request).
+- Reading comes from the inbound request's headers directly (they're immutable; no copy is made). `cookies()`/`headers()` are created once per request on first use.
 - Writing uses callbacks that call into `LixnetResponse` staging stores.
 
 This emulates the ergonomic parts of Next.js’ server runtime without importing Next.js.

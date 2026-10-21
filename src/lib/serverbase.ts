@@ -41,7 +41,10 @@ type Failure = {
     event?: string;
 };
 
-type ParsedRpcRequest<TEntry> = { ok: true; entry: TEntry; input: any } | ({ ok: false } & Failure);
+/** `body` is the raw request body, kept so handlers can re-read it without `request.clone()`. */
+type ParsedRpcRequest<TEntry> =
+    | { ok: true; entry: TEntry; input: any; body: string }
+    | ({ ok: false } & Failure);
 
 function toIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): LixnetIssue[] {
     return issues.map((issue) => ({
@@ -92,9 +95,12 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
     }
 
     protected async parse(request: Request): Promise<ParsedRpcRequest<TEntry>> {
+        // Read once as text: handlers get it back through LixnetRequest's body methods.
+        let body: string;
         let json: any;
         try {
-            json = await request.json();
+            body = await request.text();
+            json = JSON.parse(body);
         } catch (cause) {
             return { ok: false, error: "Invalid JSON", status: 400, code: "BAD_REQUEST", cause };
         }
@@ -124,7 +130,7 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
         const entry = this.events[json.event]!;
 
         if (!entry.schema) {
-            return { ok: true, entry, input: json.input };
+            return { ok: true, entry, input: json.input, body };
         }
 
         const result = await entry.schema["~standard"].validate(json.input);
@@ -141,7 +147,7 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
             };
         }
 
-        return { ok: true, entry, input: result.value };
+        return { ok: true, entry, input: result.value, body };
     }
 
     /**

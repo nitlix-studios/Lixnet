@@ -162,7 +162,8 @@ export class LixnetHeaders {
             getStaged: () => Record<string, string>;
         }
     ) {
-        this.h = new Headers(headers);
+        // Not copied: incoming request headers are immutable, and writes go to the response.
+        this.h = headers;
         this.mut = mut;
     }
 
@@ -261,6 +262,27 @@ export type LixnetRequest = Omit<Request, "headers"> & {
     headers(): LixnetHeaders;
 };
 
+/** `Request` body readers answered from the already-read body instead of the (consumed) stream. */
+function bodyReaders(request: Request, body: string) {
+    let bytes: Uint8Array<ArrayBuffer> | undefined;
+    const getBytes = () => (bytes ??= new TextEncoder().encode(body));
+    let stream: ReadableStream<Uint8Array> | undefined;
+
+    return {
+        text: async () => body,
+        json: async () => JSON.parse(body),
+        bytes: async () => getBytes().slice(),
+        arrayBuffer: async () => getBytes().slice().buffer,
+        blob: async () => new Blob([body], { type: request.headers.get("content-type") ?? "" }),
+        formData: () => new Response(body, { headers: request.headers }).formData(),
+        clone: () => new Request(request, { body }),
+        get body() {
+            return (stream ??= new Response(body).body!);
+        },
+        bodyUsed: false,
+    } as const;
+}
+
 /** Used by the server only; not part of the public package API. */
 export function wrapLixnetRequest(
     request: Request,
@@ -275,9 +297,13 @@ export function wrapLixnetRequest(
             string,
             { type: "value" | "delete"; value?: string; options?: unknown }
         >;
-    }
+    },
+    /**
+     * The request body, when the server already read it. Body methods (`json()`, `text()`,
+     * `body`, `clone()`, ...) are then served from it, so the request never needs cloning.
+     */
+    body?: string
 ): LixnetRequest {
-    const snapshot = new Headers(request.headers);
     const cookieMut = {
         setCookie: (name: string, value: string, options?: unknown) =>
             response.cookie(name, value, options),
@@ -306,21 +332,20 @@ export function wrapLixnetRequest(
             return out;
         },
     };
+
+    // Created on first use: most handlers never touch cookies or headers.
+    let cookies: LixnetCookies | undefined;
+    let headers: LixnetHeaders | undefined;
+    const injected: Record<PropertyKey, unknown> = {
+        cookies: () => (cookies ??= new LixnetCookies(request.headers.get("cookie"), cookieMut)),
+        headers: () => (headers ??= new LixnetHeaders(request.headers, headerMut)),
+    };
+    const readers = body === undefined ? undefined : bodyReaders(request, body);
+
     return new Proxy(request, {
         get(target, prop, receiver) {
-            if (prop === "cookies") {
-                return function cookies() {
-                    return new LixnetCookies(
-                        snapshot.get("cookie"),
-                        cookieMut
-                    );
-                };
-            }
-            if (prop === "headers") {
-                return function headers() {
-                    return new LixnetHeaders(snapshot, headerMut);
-                };
-            }
+            if (prop in injected) return injected[prop];
+            if (readers && prop in readers) return readers[prop as keyof typeof readers];
             // `receiver` here is this Proxy itself, not `target`. Native accessor properties
             // (e.g. Workers' `Request.prototype.cf`) are branded getters that check `this` is
             // the real internal object — invoking them with the Proxy as receiver throws
@@ -331,16 +356,13 @@ export function wrapLixnetRequest(
 }
 
 /** Wraps `request` so its cookie/header writes are staged on `response`. */
-export function createLixnetRequest(request: Request, response: LixnetResponse): LixnetRequest {
-    return wrapLixnetRequest(request, {
-        header: response.header.bind(response),
-        deleteHeader: response.deleteHeader.bind(response),
-        cookie: response.cookie.bind(response),
-        deleteCookie: response.deleteCookie.bind(response),
-        responseHeaders: response.responseHeaders,
-        responseHeaderDeletes: response.responseHeaderDeletes,
-        responseCookies: response.responseCookies,
-    });
+export function createLixnetRequest(
+    request: Request,
+    response: LixnetResponse,
+    body?: string
+): LixnetRequest {
+    // LixnetResponse has every member wrapLixnetRequest needs; it's only ever called as a method.
+    return wrapLixnetRequest(request, response, body);
 }
 
 /** @deprecated Use {@link LixnetCookies}. */

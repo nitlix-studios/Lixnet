@@ -48,8 +48,6 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
     }
 
     public async handle(request: Request): Promise<Response> {
-        const requestClone = request.clone();
-
         const response = new LixnetResponse({ formatter: this.errorFormatter });
 
         const corsResponse = this.handleCors(request, response);
@@ -62,7 +60,7 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
 
         const event = parsed.entry;
         const validatedInput = parsed.input;
-        const newRequest: LixnetRequest = createLixnetRequest(requestClone, response);
+        const newRequest: LixnetRequest = createLixnetRequest(request, response, parsed.body);
 
         const encoder = new TextEncoder();
         const abort = new AbortController();

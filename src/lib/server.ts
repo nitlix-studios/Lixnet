@@ -12,8 +12,8 @@ import { type LixnetRequest, createLixnetRequest } from "./util/request";
 import getDefaultFormatter from "./util/getDefaultFormatter";
 import type { StandardSchemaV1 } from "./standardschema";
 import type {
-    LixnetRoute,
     LixnetRouteDefinitions,
+    LixnetRoute,
     LixnetRoutes,
     LixnetRoutesFromDefinitions,
 } from "./router";
@@ -116,8 +116,6 @@ export default class LixnetServer<
     }
 
     public async handle(request: Request) {
-        const requestClone = request.clone();
-
         const response = new LixnetResponse({ formatter: this.formatter });
 
         const corsResponse = this.handleCors(request, response);
@@ -131,7 +129,7 @@ export default class LixnetServer<
         try {
             const data = await parsed.entry.handler({
                 ...parsed.input,
-                request: createLixnetRequest(requestClone, response),
+                request: createLixnetRequest(request, response, parsed.body),
                 response: response,
             });
 
