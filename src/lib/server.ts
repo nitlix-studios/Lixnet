@@ -10,7 +10,7 @@ import type {
 import { LixnetResponse } from "./util/response";
 import { type LixnetRequest, createLixnetRequest } from "./util/request";
 import getDefaultFormatter from "./util/getDefaultFormatter";
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "./standardschema";
 import type { LixnetRoute, LixnetRoutes } from "./router";
 import type { LixnetServerInjections } from "./types";
 
@@ -53,13 +53,16 @@ export default class LixnetServer<
      *
      * With a schema, the handler gets the schema's output and the client sends its input.
      */
-    public route<K extends string, TSchema extends z.ZodType, TOutput>(
+    public route<K extends string, TSchema extends StandardSchemaV1, TOutput>(
         event: K,
         route: {
             schema: TSchema;
-            handler: (input: z.output<TSchema> & LixnetServerInjections) => TOutput;
+            handler: (input: StandardSchemaV1.InferOutput<TSchema> & LixnetServerInjections) => TOutput;
         }
-    ): LixnetServer<Events, Routes & Record<K, LixnetRoute<z.input<TSchema>, Awaited<TOutput>>>>;
+    ): LixnetServer<
+        Events,
+        Routes & Record<K, LixnetRoute<StandardSchemaV1.InferInput<TSchema>, Awaited<TOutput>>>
+    >;
 
     /** Without a schema, the input is the handler's parameter type minus `request`/`response`. */
     public route<K extends string, TParams, TOutput>(
@@ -70,7 +73,7 @@ export default class LixnetServer<
         Routes & Record<K, LixnetRoute<Omit<TParams, keyof LixnetServerInjections>, Awaited<TOutput>>>
     >;
 
-    public route(event: string, route: { schema?: z.ZodType; handler: (input: any) => unknown }) {
+    public route(event: string, route: { schema?: StandardSchemaV1; handler: (input: any) => unknown }) {
         this.register({ ...route, event } as LXNServerEventInput<Events, keyof Events>);
         return this;
     }

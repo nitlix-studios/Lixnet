@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "./standardschema";
 import LixnetLog from "./util/log";
 import type { DebugLogger } from "./types";
 import type { LixnetResponse } from "./util/response";
@@ -27,7 +27,7 @@ export type LixnetServerBaseOptions = {
     cors?: LixnetCorsOptions;
 };
 
-type EventEntry = { event: PropertyKey; schema?: z.ZodType<any> };
+type EventEntry = { event: PropertyKey; schema?: StandardSchemaV1 };
 
 type ParsedRpcRequest<TEntry> =
     | { ok: true; entry: TEntry; input: any }
@@ -36,6 +36,7 @@ type ParsedRpcRequest<TEntry> =
 function describeError(cause: unknown): string | undefined {
     if (cause === undefined) return undefined;
     if (cause instanceof Error) return cause.message;
+    if (Array.isArray(cause)) return cause.map((issue) => issue?.message ?? String(issue)).join("; ");
     return String(cause);
 }
 
@@ -100,18 +101,18 @@ export default abstract class LixnetServerBase<TEntry extends EventEntry> {
             return { ok: true, entry, input: json.input };
         }
 
-        const result = entry.schema.safeParse(json.input);
-        if (!result.success) {
+        const result = await entry.schema["~standard"].validate(json.input);
+        if (result.issues) {
             return {
                 ok: false,
                 error: "Invalid input",
                 status: 400,
-                cause: result.error,
+                cause: result.issues,
                 event: json.event,
             };
         }
 
-        return { ok: true, entry, input: result.data };
+        return { ok: true, entry, input: result.value };
     }
 
     /**

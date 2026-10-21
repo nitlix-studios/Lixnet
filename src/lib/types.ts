@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "./standardschema";
 import type { LixnetRequest } from "./util/request";
 import type { LixnetResponse } from "./util/response";
 
@@ -33,7 +33,8 @@ export type LXNServerHandler<Input, Output> = (
 export type LXN_ServerClient_EventType = object;
 
 /** A schema whose parsed output must match the event's declared input type. */
-export type LXNEventSchema<Events, K extends keyof Events> = z.ZodType<
+export type LXNEventSchema<Events, K extends keyof Events> = StandardSchemaV1<
+    any,
     FunctionInput<Events[K]>
 >;
 

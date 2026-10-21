@@ -32,7 +32,7 @@ It gives you:
 
 - **HTTP RPC** via `fetch` (`LixnetServer` + `LixnetClient`)
 - **WebSocket events + callbacks** (`LixnetPeer`)
-- **Optional Zod validation** on the server
+- **Zero dependencies**, with optional validation through any [Standard Schema](https://standardschema.dev) library (zod, valibot, arktype, ...)
 - **Next.js-like** `request.cookies()` / `request.headers()` ergonomics inside handlers (without pulling in Next)
 
 It’s designed to be minimal: no codegen, no schema registry, no client bundler magic.
@@ -56,7 +56,7 @@ It’s designed to be minimal: no codegen, no schema registry, no client bundler
 Install:
 
 ```sh
-bun add lixnet zod
+bun add lixnet zod # zod is optional: any Standard Schema library (zod, valibot, arktype) works
 ```
 
 Other package managers:
@@ -78,7 +78,7 @@ type Events = {
 
 ### 2) Create the RPC server
 
-Register handlers with optional Zod schemas, then expose an HTTP endpoint that forwards the incoming `Request` to `server.handle(...)`.
+Register handlers with optional schemas (any Standard Schema library), then expose an HTTP endpoint that forwards the incoming `Request` to `server.handle(...)`.
 
 ```ts
 import { z } from "zod";
@@ -224,7 +224,7 @@ Keeping server code out of the client:
 `server.on(...)` accepts either one registration object or an array.
 
 - **`event`**: string key matching your `Events` type
-- **`schema`** (optional): Zod schema to validate `input`
+- **`schema`** (optional): a Standard Schema (zod, valibot, arktype, ...) to validate `input`
 - **`handler`**: receives validated input plus `{ request, response }` injections
 
 Example registering multiple events:

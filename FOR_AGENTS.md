@@ -35,7 +35,7 @@ The package entrypoint exports these primitives and a small request/response hel
 Install:
 
 ```sh
-bun add lixnet zod
+bun add lixnet zod # zod is optional: any Standard Schema library (zod, valibot, arktype) works
 ```
 
 ### 1) Define your contract (`Events`)
@@ -341,7 +341,7 @@ server.on({
     - `event` (required)
     - `input` (required; can be any JSON)
 4. Looks up the registered event handler by `event` name.
-5. If a Zod schema was provided at registration time, parses `input` using `schema.parse(...)`.
+5. If a schema was provided at registration time, validates `input` through its Standard Schema interface (`schema["~standard"].validate(...)`, awaited, so async refinements work). Zod 4, valibot, arktype and Effect Schema all qualify.
 6. Wraps the cloned `Request` into a `LixnetRequest` proxy via `wrapLixnetRequest(...)`:
     - `request.cookies()` gives a Next.js-like cookie API backed by the request snapshot plus staged response mutations.
     - `request.headers()` gives a Next.js-like headers API backed by the request snapshot plus staged response mutations.
@@ -715,7 +715,8 @@ Security/cleanup notes:
 
 ## Where to look first
 
-- `src/lib/server.ts`: HTTP RPC, Zod validation, request/response injection.
+- `src/lib/server.ts`: HTTP RPC, `.route(...)`, request/response injection.
+- `src/lib/serverbase.ts`: shared parsing, Standard Schema validation, CORS, error staging.
 - `src/lib/util/request.ts`: request wrappers (cookies/headers), and the `wrapLixnetRequest` proxy.
 - `src/lib/util/response.ts`: response accumulator.
 - `src/lib/util/getDefaultFormatter.ts`: default serialization, headers/cookies.
