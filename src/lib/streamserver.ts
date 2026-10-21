@@ -9,7 +9,7 @@ import type {
 } from "./types";
 import { LixnetResponse } from "./util/response";
 import { LixnetRequest, createLixnetRequest } from "./util/request";
-import getDefaultFormatter from "./util/getDefaultFormatter";
+import getDefaultFormatter, { buildResponseHeaders } from "./util/getDefaultFormatter";
 
 type LXNStreamServerEventInput<
     Events extends LXN_ServerClient_EventType,
@@ -62,42 +62,87 @@ export default class LixnetStreamServer<Events extends LXN_ServerClient_EventTyp
         const newRequest: LixnetRequest = createLixnetRequest(requestClone, response);
 
         const encoder = new TextEncoder();
-        let streamController!: ReadableStreamDefaultController<Uint8Array>;
+        const abort = new AbortController();
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        let closed = false;
 
         const body = new ReadableStream<Uint8Array>({
-            start(controller) { streamController = controller; },
+            start(c) {
+                controller = c;
+            },
+            cancel() {
+                // Client disconnected: stop emitting and let the handler observe it via stream.signal.
+                closed = true;
+                abort.abort();
+            },
         });
 
-        const stream: LXNStreamEmitter<any> = {
-            emit: (chunk: any) => {
-                streamController.enqueue(
-                    encoder.encode(JSON.stringify({ stream: true, data: chunk }) + "\n")
-                );
-            },
+        const write = (frame: object) => {
+            if (closed) return;
+            controller.enqueue(encoder.encode(JSON.stringify(frame) + "\n"));
         };
 
-        (async () => {
-            try {
-                await event.handler({ ...validatedInput, request: newRequest, response, stream });
-            } catch (error) {
-                if (this.debugLog) this.logger({ error: true, message: "Stream handler error", cause: error });
-            } finally {
-                streamController.close();
-            }
-        })();
+        // The Response is only created on the first emit (or when the handler finishes), so
+        // status, headers and cookies staged before that point are all sent, and an error
+        // thrown before anything is streamed becomes a normal JSON error response.
+        return new Promise<Response>((resolve) => {
+            let started = false;
 
-        const headers = new Headers({
-            "Content-Type": "application/x-ndjson",
-            "X-Server": "Lixnet",
-            ...this.defaultHeaders,
+            const start = () => {
+                if (started) return;
+                started = true;
+                resolve(
+                    new Response(body, {
+                        status: response.responseCode || 200,
+                        headers: buildResponseHeaders(
+                            response,
+                            this.defaultHeaders,
+                            "application/x-ndjson"
+                        ),
+                    })
+                );
+            };
+
+            const stream: LXNStreamEmitter<any> = {
+                signal: abort.signal,
+                emit: (chunk: any) => {
+                    start();
+                    write({ stream: true, data: chunk });
+                },
+            };
+
+            (async () => {
+                try {
+                    await event.handler({ ...validatedInput, request: newRequest, response, stream });
+                    start();
+                } catch (error) {
+                    const failure = {
+                        error: "Handler error",
+                        status: 500,
+                        cause: error,
+                        event: event.event as string,
+                    };
+
+                    if (!started) {
+                        resolve(this.fail(response, failure));
+                        return;
+                    }
+
+                    // Headers are already sent, so report the error as the final frame.
+                    this.stageFailure(response, failure);
+                    write({
+                        error: response.responseError,
+                        ...(response.responseErrorDetail
+                            ? { detail: response.responseErrorDetail }
+                            : {}),
+                    });
+                } finally {
+                    if (started && !closed) {
+                        closed = true;
+                        controller.close();
+                    }
+                }
+            })();
         });
-        for (const [name, value] of Object.entries(response.responseHeaders)) {
-            headers.set(name, value);
-        }
-        for (const name of response.responseHeaderDeletes) {
-            headers.delete(name);
-        }
-
-        return new Response(body, { status: 200, headers });
     }
 }

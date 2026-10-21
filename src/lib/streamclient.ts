@@ -7,6 +7,10 @@ export type LXNStreamCallOptions<TChunk> = Prettify<{
     onStreamChunk?: (chunk: TChunk) => void;
 } & Omit<RequestInit, "method" | "body">>;
 
+function toError(frame: { error: string; detail?: string }): Error {
+    return new Error(frame.error, frame.detail ? { cause: frame.detail } : undefined);
+}
+
 export default class LixnetStreamClient<Events extends LXN_ServerClient_EventType> {
     private rpcUrl: string;
 
@@ -14,6 +18,7 @@ export default class LixnetStreamClient<Events extends LXN_ServerClient_EventTyp
         this.rpcUrl = rpcUrl;
     }
 
+    /** Resolves when the stream ends; throws if the server returns or streams an error. */
     public async call<K extends keyof Events>(
         event: K,
         input: FunctionInput<Events[K]>,
@@ -28,35 +33,48 @@ export default class LixnetStreamClient<Events extends LXN_ServerClient_EventTyp
             body: JSON.stringify({ event, input }),
         });
 
+        if (!response.ok) {
+            const json = await response.json().catch(() => null);
+            if (json && typeof json.error === "string") throw toError(json);
+            throw new Error(`Stream request failed with status ${response.status}`);
+        }
+
         if (!response.body) throw new Error("Stream response has no body");
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        const handleLine = (line: string) => {
+            const trimmed = line.trim();
+            if (!trimmed) return;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop()!;
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-                try {
-                    const parsed = JSON.parse(trimmed);
-                    if (parsed.stream === true && onStreamChunk) onStreamChunk(parsed.data);
-                } catch { /* skip malformed line */ }
-            }
-        }
-
-        if (buffer.trim()) {
+            let parsed: any;
             try {
-                const parsed = JSON.parse(buffer.trim());
-                if (parsed.stream === true && onStreamChunk) onStreamChunk(parsed.data);
-            } catch { /* skip */ }
+                parsed = JSON.parse(trimmed);
+            } catch {
+                return; // skip malformed line
+            }
+
+            if (typeof parsed?.error === "string") throw toError(parsed);
+            if (parsed?.stream === true) onStreamChunk?.(parsed.data);
+        };
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop()!;
+                lines.forEach(handleLine);
+            }
+
+            handleLine(buffer + decoder.decode());
+        } catch (error) {
+            await reader.cancel().catch(() => {});
+            throw error;
         }
     }
 }

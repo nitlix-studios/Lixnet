@@ -446,6 +446,38 @@ Both wrappers are “read from request snapshot, write into response staging”:
 
 This emulates the ergonomic parts of Next.js’ server runtime without importing Next.js.
 
+## HTTP streaming (`LixnetStreamServer` / `LixnetStreamClient`)
+
+Same request shape and error handling as `LixnetServer`, but the handler gets a `stream` injection and the response is NDJSON (`application/x-ndjson`), one frame per line.
+
+```ts
+streamServer.on({
+    event: "generate",
+    schema: z.object({ prompt: z.string() }),
+    handler: async ({ prompt, stream, response }) => {
+        response.cookie("seen", "1"); // fine: nothing emitted yet
+        for await (const token of llm(prompt, { signal: stream.signal })) {
+            stream.emit(token);
+        }
+    },
+});
+
+await streamClient.call("generate", { prompt: "hi" }, { onStreamChunk: (t) => print(t) });
+```
+
+- The response (status, headers, cookies) is sent on the first `stream.emit(...)`, or when the handler returns. Header/cookie changes after the first emit are ignored.
+- A handler that throws before emitting gets a normal JSON error response (500), same as `LixnetServer`.
+- A handler that throws after emitting ends the stream with an `{ "error": "Handler error" }` frame (plus `detail` with `exposeErrors`).
+- `stream.signal` aborts when the client disconnects; `emit` is a no-op from then on.
+- `LixnetStreamClient.call(...)` resolves when the stream ends and throws on non-2xx responses or error frames.
+
+Frames:
+
+```json
+{ "stream": true, "data": {} }
+{ "error": "string", "detail": "string?" }
+```
+
 ## WebSocket peer: mental model
 
 `LixnetPeer<ThisToThereEvents, ThereToThisEvents, SocketType>` provides:

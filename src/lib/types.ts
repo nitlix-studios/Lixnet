@@ -48,5 +48,8 @@ export type LixnetServerInjections = {
 
 /** The `stream` object injected into stream event handlers. */
 export type LXNStreamEmitter<TChunk> = {
+    /** Sends a chunk. The first call sends the response headers; later header/cookie changes are ignored. */
     emit: (chunk: TChunk) => void;
+    /** Aborted when the client disconnects; `emit` becomes a no-op from then on. */
+    signal: AbortSignal;
 };
