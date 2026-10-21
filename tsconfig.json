@@ -28,5 +28,5 @@
         "allowSyntheticDefaultImports": true /* Allow default imports for ESM compatibility */
     },
 
-    "exclude": ["tests", "dist"]
+    "exclude": ["tests", "dist", "benchmarks"]
 }

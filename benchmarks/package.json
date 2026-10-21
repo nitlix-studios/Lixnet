@@ -1,0 +1,30 @@
+{
+    "name": "lixnet-benchmarks",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "bench": "bun run-all.ts",
+        "bench:bundle": "bun bundle/size.ts",
+        "bench:types": "bun types/scale.ts",
+        "bench:startup": "bun runtime/startup.ts",
+        "bench:runtime": "bun runtime/server.ts",
+        "bench:http": "bun runtime/http.ts",
+        "build:lixnet": "cd .. && bunx tsc",
+        "test": "bun test"
+    },
+    "dependencies": {
+        "@hono/standard-validator": "^0.4.0",
+        "@orpc/client": "^1.16.0",
+        "@orpc/server": "^1.16.0",
+        "@trpc/client": "^11.19.0",
+        "@trpc/server": "^11.19.0",
+        "hono": "^4.13.13",
+        "mitata": "^1.0.34",
+        "ts7": "npm:typescript@7.0.2",
+        "typescript": "5.9.3",
+        "zod": "^4.6.7"
+    },
+    "devDependencies": {
+        "@types/bun": "^1.4.3"
+    }
+}
