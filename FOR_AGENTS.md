@@ -457,13 +457,13 @@ Normal outbound event (no callback):
 Normal outbound event (with callback id):
 
 ```json
-{ "event": "name", "data": {}, "rf": "LX-..." }
+{ "event": "name", "data": {}, "rf": "LXN-..." }
 ```
 
 Callback response:
 
 ```json
-{ "rb": "LX-...", "data": {} }
+{ "rb": "LXN-...", "data": {} }
 ```
 
 ## WebSockets: complete example (`LixnetPeer`)
@@ -553,15 +553,16 @@ If you touch this protocol, keep it backwards compatible or bump major version (
 ### Chunking protocol details
 
 - **Starter** (JSON string):
-    - `{ tId: "LX-...", event: "name", chunkCount: number, rf?: "LX-..." }`
+    - `{ tId: "LXN-...", event: "name", chunkCount: number, rf?: "LXN-..." }`
 - **Launch** (JSON string):
-    - `{ launch: true, tId: "LX-..." }`
-- **Chunk** (raw string, not JSON):
-    - `"LX-....<dot><chunkIndex>.<chunkData>"`
+    - `{ launch: true, tId: "LXN-..." }`
+- **Chunk** (raw string, not JSON; ids are prefixed `LXN-`, see `src/lib/vars.ts`):
+    - `"LXN-....<dot><chunkIndex>.<chunkData>"`
 
 Security/cleanup notes:
 
 - Receiver schedules `transmissionSecurityCheck` after 30s on starter receipt.
+- Starters with `chunkCount` above `transmissionChunksLimit` (default 20) or chunks with an out-of-range index are ignored; the sender throws if its payload needs more chunks than its own limit.
 - The check prunes:
     - abandoned transmissions (no chunks or last chunk > 30s ago)
     - very slow transmissions (estimated completion > 5 minutes)

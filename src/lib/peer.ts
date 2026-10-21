@@ -1,9 +1,11 @@
+import { LIXNET_ID_PREFIX } from "./vars";
+
 export type PeerEventInput<T> = T extends (input: infer TInput) => any
     ? TInput
     : never;
 
 function createLixnetId() {
-    return "LXN-" + Math.random().toString(36).substring(2, 15);
+    return LIXNET_ID_PREFIX + Math.random().toString(36).substring(2, 15);
 }
 
 type Caller<ThisToThereEvents extends Record<string, any>> = <
@@ -82,6 +84,13 @@ export default class LixnetPeer<
                 tId,
                 dataLength: dataString.length,
             });
+
+            if (limits.length > this.transmissionChunksLimit) {
+                if (rf) delete this.rb[rf];
+                throw new Error(
+                    `LIXNET - Payload needs ${limits.length} chunks, limit is ${this.transmissionChunksLimit}`
+                );
+            }
 
             // Send transmission id and rf
             const sendData: any = {
@@ -238,7 +247,9 @@ export default class LixnetPeer<
     }
 
     public handle({ data, socket }: { data: any; socket: SocketType }) {
-        if (data.startsWith("LX-")) {
+        if (typeof data !== "string") return;
+
+        if (data.startsWith(LIXNET_ID_PREFIX)) {
             // Transmission chunk
             const splits = data.split(".");
             const tId = splits[0];
@@ -247,6 +258,14 @@ export default class LixnetPeer<
 
             if (!this.transmissions[tId]) {
                 // No transmission found
+                return;
+            }
+
+            if (
+                !Number.isInteger(chunkIndex) ||
+                chunkIndex < 0 ||
+                chunkIndex >= this.transmissions[tId].chunkCount
+            ) {
                 return;
             }
 
@@ -310,6 +329,16 @@ export default class LixnetPeer<
 
         if (data.tId) {
             // Starting transmission, allow the client to start sending chunks
+            if (
+                typeof data.tId !== "string" ||
+                !data.tId.startsWith(LIXNET_ID_PREFIX) ||
+                !Number.isInteger(data.chunkCount) ||
+                data.chunkCount < 1 ||
+                data.chunkCount > this.transmissionChunksLimit
+            ) {
+                return;
+            }
+
             this.transmissions[data.tId] = {
                 chunks: {},
                 chunkTimes: {},
